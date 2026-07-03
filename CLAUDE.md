@@ -31,7 +31,11 @@ src/
   game/    # Pure, deterministic game logic. Plain TypeScript only —
            #   NO React, no DOM, no Zustand, no side effects.
            #   All mechanics (axes, reviews, market, economy) live here.
+           #   types.ts holds the §15 domain model (Game, Studio, Staff,
+           #   Outlet, Market) and the enum-style const arrays.
            #   Tests are colocated: foo.ts + foo.test.ts.
+    data/  # Seed/static data only, no logic: genre axis profiles (§4),
+           #   platform catalog, outlet archetypes (§7.4).
   state/   # Zustand stores. The bridge layer: stores may import from
            #   src/game/, never the reverse.
   ui/      # React components. Read/write state via the stores;
