@@ -3,6 +3,7 @@ import { PLATFORM_CATALOG } from "../game/data/platforms";
 import { STUB_MARKET } from "../game/data/market";
 import { researchTrendFit, validateConcept } from "../game/conception";
 import { useConceptionStore } from "../state/conceptionStore";
+import { useProductionStore } from "../state/productionStore";
 import { useStudioStore } from "../state/studioStore";
 
 /** "double-a" → "Double A", "rpg" → "Rpg" (labels stay data-driven). */
@@ -96,13 +97,25 @@ export default function ConceptionScreen() {
             Q{greenlitGame.releaseWindow.quarter} {greenlitGame.releaseWindow.year}
           </dd>
         </dl>
-        <button
-          type="button"
-          onClick={store.startOver}
-          className="rounded-md border border-zinc-600 px-4 py-2 text-sm text-zinc-300 hover:border-zinc-400"
-        >
-          Start another concept
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              useProductionStore.getState().start(greenlitGame);
+              store.startOver();
+            }}
+            className="rounded-md bg-emerald-400 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-emerald-300"
+          >
+            Start production
+          </button>
+          <button
+            type="button"
+            onClick={store.startOver}
+            className="rounded-md border border-zinc-600 px-4 py-2 text-sm text-zinc-300 hover:border-zinc-400"
+          >
+            Start another concept
+          </button>
+        </div>
       </div>
     );
   }
