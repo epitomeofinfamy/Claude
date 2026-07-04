@@ -1,13 +1,28 @@
 import { useStudioStore } from "../state/studioStore";
 import { useProductionStore } from "../state/productionStore";
+import { useShipStore } from "../state/shipStore";
 import ConceptionScreen from "./ConceptionScreen";
 import ProductionBoard from "./ProductionBoard";
+import ShipDecisionScreen from "./ShipDecisionScreen";
+import RevealScreen from "./RevealScreen";
 
 export default function App() {
   const studioName = useStudioStore((s) => s.studioName);
   const cash = useStudioStore((s) => s.cash);
   const year = useStudioStore((s) => s.year);
   const inProduction = useProductionStore((s) => s.run !== null);
+  const shipping = useShipStore((s) => s.ship !== null);
+  const revealed = useShipStore((s) => s.result !== null);
+
+  const screen = revealed ? (
+    <RevealScreen />
+  ) : shipping ? (
+    <ShipDecisionScreen />
+  ) : inProduction ? (
+    <ProductionBoard />
+  ) : (
+    <ConceptionScreen />
+  );
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
@@ -21,9 +36,7 @@ export default function App() {
           </span>
         </div>
       </header>
-      <main className="px-4 py-8">
-        {inProduction ? <ProductionBoard /> : <ConceptionScreen />}
-      </main>
+      <main className="px-4 py-8">{screen}</main>
     </div>
   );
 }

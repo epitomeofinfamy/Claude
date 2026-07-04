@@ -8,6 +8,7 @@ import { produceAxes } from "../game/production";
 import { blendGenreProfiles } from "../game/conception";
 import { QUALITY_AXES } from "../game/types";
 import { useProductionStore } from "../state/productionStore";
+import { useShipStore } from "../state/shipStore";
 import { useStudioStore } from "../state/studioStore";
 
 function Meter({ label, value, tone }: { label: string; value: number; tone: string }) {
@@ -187,14 +188,17 @@ export default function ProductionBoard() {
           </div>
           <p className="text-sm text-zinc-300">
             Objective quality <span className="font-bold text-emerald-300">{Math.round(preview.q)}</span>
-            <span className="ml-2 text-zinc-500">— ready for the Ship Decision (§6, coming next)</span>
+            <span className="ml-2 text-zinc-500">— time to decide how this ships</span>
           </p>
           <button
             type="button"
-            onClick={store.abandonProject}
-            className="rounded-md border border-zinc-600 px-4 py-2 text-sm text-zinc-300 hover:border-zinc-400"
+            onClick={() => {
+              useShipStore.getState().begin(game, run);
+              store.abandonProject();
+            }}
+            className="rounded-md bg-emerald-400 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-emerald-300"
           >
-            Back to concept (dev loop)
+            Go to the Ship Decision
           </button>
         </section>
       )}
