@@ -3,8 +3,7 @@ import { PLATFORM_CATALOG } from "../game/data/platforms";
 import { STUB_MARKET } from "../game/data/market";
 import { researchTrendFit, validateConcept } from "../game/conception";
 import { useConceptionStore } from "../state/conceptionStore";
-import { useProductionStore } from "../state/productionStore";
-import { useStudioStore } from "../state/studioStore";
+import { useLoopStore } from "../state/loopStore";
 
 /** "double-a" → "Double A", "rpg" → "Rpg" (labels stay data-driven). */
 function label(id: string): string {
@@ -64,61 +63,15 @@ const OVERALL_STYLE: Record<string, string> = {
 
 export default function ConceptionScreen() {
   const draft = useConceptionStore((s) => s.draft);
-  const greenlitGame = useConceptionStore((s) => s.greenlitGame);
   const store = useConceptionStore();
-  const ipCatalog = useStudioStore((s) => s.ipCatalog);
+  const ipCatalog = useLoopStore((s) => s.state.studio.ipCatalog);
+  const greenlight = useLoopStore((s) => s.greenlight);
 
   const problems = validateConcept(draft, ipCatalog);
   const research =
     draft.genres.length > 0 && draft.topic !== null
       ? researchTrendFit(draft.genres, draft.topic, STUB_MARKET)
       : null;
-
-  if (greenlitGame) {
-    return (
-      <div className="mx-auto max-w-xl space-y-4 rounded-xl border border-emerald-500/40 bg-zinc-900 p-6">
-        <p className="text-sm font-medium uppercase tracking-[0.3em] text-emerald-400">
-          Greenlit — ready for production
-        </p>
-        <h1 className="text-3xl font-bold">{greenlitGame.title}</h1>
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-          <dt className="text-zinc-500">Genre</dt>
-          <dd>{greenlitGame.genres.map((g) => GENRE_LABELS[g] ?? label(g)).join(" / ")}</dd>
-          <dt className="text-zinc-500">Topic</dt>
-          <dd>{label(greenlitGame.topic)}</dd>
-          <dt className="text-zinc-500">Platforms</dt>
-          <dd>{greenlitGame.platforms.map((p) => PLATFORM_CATALOG[p].name).join(", ")}</dd>
-          <dt className="text-zinc-500">Scope</dt>
-          <dd>{TIER_LABELS[greenlitGame.scopeTier] ?? label(greenlitGame.scopeTier)}</dd>
-          <dt className="text-zinc-500">Basis</dt>
-          <dd>{greenlitGame.isSequelOf ? `Sequel (follows ${greenlitGame.isSequelOf})` : "New IP"}</dd>
-          <dt className="text-zinc-500">Release window</dt>
-          <dd>
-            Q{greenlitGame.releaseWindow.quarter} {greenlitGame.releaseWindow.year}
-          </dd>
-        </dl>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              useProductionStore.getState().start(greenlitGame);
-              store.startOver();
-            }}
-            className="rounded-md bg-emerald-400 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-emerald-300"
-          >
-            Start production
-          </button>
-          <button
-            type="button"
-            onClick={store.startOver}
-            className="rounded-md border border-zinc-600 px-4 py-2 text-sm text-zinc-300 hover:border-zinc-400"
-          >
-            Start another concept
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -153,7 +106,7 @@ export default function ConceptionScreen() {
               selected={draft.basis.kind === "sequel" && draft.basis.ipId === ip.id}
               onClick={() => store.setBasis({ kind: "sequel", ipId: ip.id })}
             >
-              Sequel to {ip.name}
+              Sequel to {ip.name} (pedigree {ip.pedigree})
             </Chip>
           ))
         )}
@@ -237,7 +190,10 @@ export default function ConceptionScreen() {
         <button
           type="button"
           disabled={problems.length > 0}
-          onClick={() => store.greenlight()}
+          onClick={() => {
+            greenlight(draft);
+            store.reset();
+          }}
           className="rounded-md bg-amber-400 px-5 py-2 font-semibold text-zinc-950 transition-opacity hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-30"
         >
           Greenlight

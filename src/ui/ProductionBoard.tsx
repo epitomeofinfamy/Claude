@@ -1,4 +1,4 @@
-import { WORKSTREAMS, type Staff } from "../game/types";
+import { QUALITY_AXES, WORKSTREAMS, type Staff } from "../game/types";
 import {
   MILESTONE_TUNING,
   isProductionComplete,
@@ -6,10 +6,8 @@ import {
 } from "../game/milestones";
 import { produceAxes } from "../game/production";
 import { blendGenreProfiles } from "../game/conception";
-import { QUALITY_AXES } from "../game/types";
-import { useProductionStore } from "../state/productionStore";
-import { useShipStore } from "../state/shipStore";
-import { useStudioStore } from "../state/studioStore";
+import { projectEngine } from "../game/loop";
+import { useLoopStore } from "../state/loopStore";
 
 function Meter({ label, value, tone }: { label: string; value: number; tone: string }) {
   return (
@@ -46,11 +44,9 @@ function StaffCard({ member }: { member: Staff }) {
 }
 
 export default function ProductionBoard() {
-  const game = useProductionStore((s) => s.game);
-  const run = useProductionStore((s) => s.run);
-  const notices = useProductionStore((s) => s.notices);
-  const store = useProductionStore();
-  const engine = useStudioStore((s) => s.engines[0]);
+  const state = useLoopStore((s) => s.state);
+  const store = useLoopStore();
+  const { game, run, lastNotices: notices } = state;
 
   if (!game || !run) return null;
 
@@ -58,7 +54,10 @@ export default function ProductionBoard() {
   const complete = isProductionComplete(run);
   const preview = complete
     ? produceAxes(
-        toProductionInputs(run, { riskTaking: 50, engineTechLevel: engine?.techLevel ?? 20 }),
+        toProductionInputs(run, {
+          riskTaking: state.riskTaking,
+          engineTechLevel: projectEngine(state).techLevel,
+        }),
         blendGenreProfiles(game.genres),
       )
     : null;
@@ -126,7 +125,8 @@ export default function ProductionBoard() {
       {/* Team */}
       <section className="space-y-2">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400">
-          Team {run.departedStaff.length > 0 && (
+          Team{" "}
+          {run.departedStaff.length > 0 && (
             <span className="normal-case text-red-400">
               — departed: {run.departedStaff.join(", ")}
             </span>
@@ -145,14 +145,14 @@ export default function ProductionBoard() {
           <button
             type="button"
             disabled={run.pendingEvent !== null}
-            onClick={store.advance}
+            onClick={store.advanceProduction}
             className="rounded-md bg-amber-400 px-5 py-2 font-semibold text-zinc-950 hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-30"
           >
             Advance milestone
           </button>
           <button
             type="button"
-            onClick={store.toggleCrunch}
+            onClick={() => store.setCrunch(!run.crunching)}
             className={`rounded-md border px-4 py-2 text-sm ${
               run.crunching
                 ? "border-red-500 bg-red-500/10 text-red-300"
@@ -187,15 +187,13 @@ export default function ProductionBoard() {
             ))}
           </div>
           <p className="text-sm text-zinc-300">
-            Objective quality <span className="font-bold text-emerald-300">{Math.round(preview.q)}</span>
+            Objective quality{" "}
+            <span className="font-bold text-emerald-300">{Math.round(preview.q)}</span>
             <span className="ml-2 text-zinc-500">— time to decide how this ships</span>
           </p>
           <button
             type="button"
-            onClick={() => {
-              useShipStore.getState().begin(game, run);
-              store.abandonProject();
-            }}
+            onClick={store.enterShipDecision}
             className="rounded-md bg-emerald-400 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-emerald-300"
           >
             Go to the Ship Decision

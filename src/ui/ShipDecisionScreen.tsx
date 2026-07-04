@@ -1,12 +1,17 @@
+import { useState } from "react";
 import { QUALITY_AXES, PLATFORMS, type ReleaseWindow } from "../game/types";
 import { MILESTONE_TUNING } from "../game/milestones";
-import { deriveWindowCrowding, estimateReception } from "../game/shipdecision";
+import {
+  deriveWindowCrowding,
+  estimateReception,
+  type LaunchPlan,
+} from "../game/shipdecision";
 import { blendGenreProfiles } from "../game/conception";
+import { projectEngine } from "../game/loop";
 import { PLATFORM_CATALOG } from "../game/data/platforms";
 import { STUB_MARKET } from "../game/data/market";
 import { OUTLETS } from "../game/data/outlets";
-import { useShipStore } from "../state/shipStore";
-import { useStudioStore } from "../state/studioStore";
+import { useLoopStore } from "../state/loopStore";
 
 function Meter({ label, value, tone }: { label: string; value: number; tone: string }) {
   return (
@@ -20,10 +25,10 @@ function Meter({ label, value, tone }: { label: string; value: number; tone: str
   );
 }
 
-/** The next six quarters starting after the last production milestone. */
-function upcomingWindows(): ReleaseWindow[] {
+/** The next six quarters from the studio's current year. */
+function upcomingWindows(fromYear: number): ReleaseWindow[] {
   const windows: ReleaseWindow[] = [];
-  let year = 1985;
+  let year = fromYear;
   let quarter = 4;
   for (let i = 0; i < 6; i++) {
     windows.push({ year, quarter: quarter as ReleaseWindow["quarter"] });
@@ -43,21 +48,26 @@ const CROWDING_STYLE: Record<string, string> = {
 };
 
 export default function ShipDecisionScreen() {
-  const game = useShipStore((s) => s.game);
-  const ship = useShipStore((s) => s.ship);
-  const plan = useShipStore((s) => s.plan);
-  const store = useShipStore();
-  const studio = useStudioStore();
+  const state = useLoopStore((s) => s.state);
+  const store = useLoopStore();
+  const { game, ship, studio } = state;
+  const [plan, setPlan] = useState<LaunchPlan>(() => ({
+    releaseWindow: { year: studio.year + 1, quarter: 1 },
+    marketingHype: 40,
+    price: 50,
+    platforms: game ? [...game.platforms] : ["pc"],
+  }));
 
   if (!game || !ship) return null;
 
+  const patch = (partial: Partial<LaunchPlan>) => setPlan((p) => ({ ...p, ...partial }));
   const estimate = estimateReception(ship, plan, {
     game,
     genreProfile: blendGenreProfiles(game.genres),
     market: STUB_MARKET,
     outlets: OUTLETS,
-    engineTechLevel: studio.engines[0]?.techLevel ?? 20,
-    riskTaking: 50,
+    engineTechLevel: projectEngine(state).techLevel,
+    riskTaking: state.riskTaking,
     reputation: studio.reputation,
     sequelPedigree: 0,
   });
@@ -83,7 +93,6 @@ export default function ShipDecisionScreen() {
       </header>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        {/* Current axis readings + estimates */}
         <section className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400">
             Axis readings (if shipped now)
@@ -99,7 +108,6 @@ export default function ShipDecisionScreen() {
           </p>
         </section>
 
-        {/* Bugs + team */}
         <section className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400">
             The cost of shipping now
@@ -124,39 +132,37 @@ export default function ShipDecisionScreen() {
         </section>
       </div>
 
-      {/* The four levers */}
       <section className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400">
           Levers — combine as needed
         </h2>
         <div className="grid gap-2 sm:grid-cols-4">
-          <button type="button" onClick={store.polish} className="rounded-md border border-zinc-700 p-3 text-left hover:border-amber-400">
+          <button type="button" onClick={store.shipPolish} className="rounded-md border border-zinc-700 p-3 text-left hover:border-amber-400">
             <p className="font-semibold text-amber-300">Polish</p>
             <p className="text-xs text-zinc-500">Bugs ↓ Polish ↑ · slips a milestone, costs budget</p>
           </button>
-          <button type="button" onClick={store.crunch} className="rounded-md border border-zinc-700 p-3 text-left hover:border-red-400">
+          <button type="button" onClick={store.shipCrunch} className="rounded-md border border-zinc-700 p-3 text-left hover:border-red-400">
             <p className="font-semibold text-red-300">Crunch</p>
             <p className="text-xs text-zinc-500">Same work, no slip · burnout ↑, quit risk</p>
           </button>
-          <button type="button" onClick={store.cutScope} className="rounded-md border border-zinc-700 p-3 text-left hover:border-sky-400">
+          <button type="button" onClick={store.shipCutScope} className="rounded-md border border-zinc-700 p-3 text-left hover:border-sky-400">
             <p className="font-semibold text-sky-300">Cut scope</p>
             <p className="text-xs text-zinc-500">Ships on time, bugs ↓ · Content pays</p>
           </button>
-          <button type="button" onClick={store.delay} className="rounded-md border border-zinc-700 p-3 text-left hover:border-emerald-400">
+          <button type="button" onClick={store.shipDelay} className="rounded-md border border-zinc-700 p-3 text-left hover:border-emerald-400">
             <p className="font-semibold text-emerald-300">Delay</p>
             <p className="text-xs text-zinc-500">Team rests · budget ↑, hype cools</p>
           </button>
         </div>
       </section>
 
-      {/* Launch plan */}
       <section className="space-y-4 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400">Launch</h2>
 
         <div className="space-y-1">
           <p className="text-xs text-zinc-500">Release window — the competitive calendar</p>
           <div className="flex flex-wrap gap-2">
-            {upcomingWindows().map((w) => {
+            {upcomingWindows(studio.year).map((w) => {
               const crowding = deriveWindowCrowding(STUB_MARKET, w);
               const selected =
                 plan.releaseWindow.year === w.year && plan.releaseWindow.quarter === w.quarter;
@@ -167,7 +173,7 @@ export default function ShipDecisionScreen() {
                 <button
                   key={`${w.year}-${w.quarter}`}
                   type="button"
-                  onClick={() => store.setPlan({ releaseWindow: w })}
+                  onClick={() => patch({ releaseWindow: w })}
                   className={`rounded-md border px-3 py-2 text-left text-sm ${
                     selected ? "border-amber-400 bg-amber-400/10" : "border-zinc-700 hover:border-zinc-500"
                   }`}
@@ -198,7 +204,7 @@ export default function ShipDecisionScreen() {
               min={0}
               max={100}
               value={plan.marketingHype}
-              onChange={(e) => store.setPlan({ marketingHype: Number(e.target.value) })}
+              onChange={(e) => patch({ marketingHype: Number(e.target.value) })}
               className="w-full accent-amber-400"
             />
             <span className="text-xs text-zinc-600">
@@ -212,7 +218,7 @@ export default function ShipDecisionScreen() {
               min={0}
               max={100}
               value={plan.price}
-              onChange={(e) => store.setPlan({ price: Number(e.target.value) })}
+              onChange={(e) => patch({ price: Number(e.target.value) })}
               className="w-full accent-amber-400"
             />
             <span className="text-xs text-zinc-600">50 = standard; users weigh value hard.</span>
@@ -227,7 +233,7 @@ export default function ShipDecisionScreen() {
                 key={platform}
                 type="button"
                 onClick={() =>
-                  store.setPlan({
+                  patch({
                     platforms: selected
                       ? plan.platforms.filter((p) => p !== platform)
                       : [...plan.platforms, platform],
@@ -248,7 +254,7 @@ export default function ShipDecisionScreen() {
         <button
           type="button"
           disabled={plan.platforms.length === 0}
-          onClick={store.launch}
+          onClick={() => store.launch(plan)}
           className="rounded-md bg-amber-400 px-6 py-2.5 text-lg font-bold text-zinc-950 hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-30"
         >
           Go gold — launch

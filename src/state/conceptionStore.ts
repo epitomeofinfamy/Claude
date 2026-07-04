@@ -1,39 +1,26 @@
 /**
- * Conception-screen store: holds the player's in-progress concept draft and
- * the greenlit Game. All rules live in src/game/conception.ts — this store
- * only sequences choices and supplies identifiers.
+ * Conception-screen store: holds only the player's in-progress concept
+ * draft. Validation and greenlighting live in the game logic; the actual
+ * greenlight goes through the loop store.
  */
 
 import { create } from "zustand";
-import {
-  EMPTY_DRAFT,
-  greenlightGame,
-  validateConcept,
-  type ConceptBasis,
-  type ConceptDraft,
-} from "../game/conception";
-import type { Game, Genre, Platform, ScopeTier, Topic } from "../game/types";
-import { useStudioStore } from "./studioStore";
-
-let nextId = 1;
+import { EMPTY_DRAFT, type ConceptBasis, type ConceptDraft } from "../game/conception";
+import type { Genre, Platform, ScopeTier, Topic } from "../game/types";
 
 interface ConceptionState {
   draft: ConceptDraft;
-  greenlitGame: Game | null;
   setTitle: (title: string) => void;
   setBasis: (basis: ConceptBasis) => void;
   toggleGenre: (genre: Genre) => void;
   setTopic: (topic: Topic) => void;
   togglePlatform: (platform: Platform) => void;
   setScopeTier: (tier: ScopeTier) => void;
-  /** Validates and, if clean, produces the configured Game. Returns problems. */
-  greenlight: () => string[];
-  startOver: () => void;
+  reset: () => void;
 }
 
-export const useConceptionStore = create<ConceptionState>()((set, get) => ({
+export const useConceptionStore = create<ConceptionState>()((set) => ({
   draft: EMPTY_DRAFT,
-  greenlitGame: null,
 
   setTitle: (title) => set((s) => ({ draft: { ...s.draft, title } })),
   setBasis: (basis) => set((s) => ({ draft: { ...s.draft, basis } })),
@@ -60,23 +47,5 @@ export const useConceptionStore = create<ConceptionState>()((set, get) => ({
       return { draft: { ...s.draft, platforms } };
     }),
 
-  greenlight: () => {
-    const { draft } = get();
-    const studio = useStudioStore.getState();
-    const ipCatalog = studio.ipCatalog;
-    const problems = validateConcept(draft, ipCatalog);
-    if (problems.length > 0) return problems;
-    const id = nextId++;
-    const game = greenlightGame(draft, {
-      gameId: `game-${id}`,
-      newIpId: `ip-${id}`,
-      engineId: "engine-1",
-      releaseWindow: { year: studio.year, quarter: 4 },
-      ipCatalog,
-    });
-    set({ greenlitGame: game });
-    return [];
-  },
-
-  startOver: () => set({ draft: EMPTY_DRAFT, greenlitGame: null }),
+  reset: () => set({ draft: EMPTY_DRAFT }),
 }));
