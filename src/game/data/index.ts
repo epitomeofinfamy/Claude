@@ -3,3 +3,4 @@
 export { GENRE_PROFILES, EMPHASIZED, NEUTRAL, DEEMPHASIZED } from "./genres";
 export { PLATFORM_CATALOG } from "./platforms";
 export { OUTLETS } from "./outlets";
+export { STUB_MARKET } from "./market";

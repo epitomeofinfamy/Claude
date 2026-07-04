@@ -5,6 +5,7 @@
  */
 
 import { create } from "zustand";
+import type { Ip } from "../game/types";
 
 interface StudioState {
   studioName: string;
@@ -12,6 +13,8 @@ interface StudioState {
   reputation: number;
   /** In-game year; the campaign starts in a garage in 1985 (GDD §1). */
   year: number;
+  /** Shipped franchises available for sequels (GDD §10); empty at the start. */
+  ipCatalog: Ip[];
   setStudioName: (name: string) => void;
 }
 
@@ -20,5 +23,6 @@ export const useStudioStore = create<StudioState>()((set) => ({
   cash: 20_000,
   reputation: 0,
   year: 1985,
+  ipCatalog: [],
   setStudioName: (name) => set({ studioName: name }),
 }));
