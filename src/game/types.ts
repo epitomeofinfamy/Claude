@@ -58,6 +58,19 @@ export const SCOPE_TIERS = ["prototype", "indie", "double-a", "aaa"] as const;
 
 export type ScopeTier = (typeof SCOPE_TIERS)[number];
 
+/** Production workstreams; each feeds one or more quality axes (GDD §5). */
+export const WORKSTREAMS = [
+  "gameplay",
+  "content",
+  "tech",
+  "art",
+  "audio",
+  "narrative",
+  "polish",
+] as const;
+
+export type Workstream = (typeof WORKSTREAMS)[number];
+
 /** Staff specialties (GDD §5). */
 export const SPECIALTIES = [
   "designer",
