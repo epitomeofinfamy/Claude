@@ -9,6 +9,7 @@ import {
   techFactor,
   type ProductionInputs,
 } from "./production";
+import { DEFAULT_TUNING } from "./config";
 import { GENRE_PROFILES } from "./data/genres";
 import { QUALITY_AXES } from "./types";
 
@@ -219,7 +220,7 @@ describe("formula pieces", () => {
 
   it("scopeFactor is 1 with no pressure and steepens as pressure grows", () => {
     expect(scopeFactor(0)).toBe(1);
-    expect(scopeFactor(100)).toBeCloseTo(1 - PRODUCTION_TUNING.OVERSCOPE_STEEPNESS);
+    expect(scopeFactor(100)).toBeCloseTo(1 - DEFAULT_TUNING.overscopeSteepness);
     // Convex: the second half of the pressure range costs more than the first.
     const firstHalf = scopeFactor(0) - scopeFactor(50);
     const secondHalf = scopeFactor(50) - scopeFactor(100);

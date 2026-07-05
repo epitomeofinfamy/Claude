@@ -21,6 +21,7 @@
 
 import type { ScopeTier, Staff } from "./types";
 import { clamp } from "./quality";
+import { getTuning } from "./config";
 
 export const ECONOMY_TUNING = {
   // --- Quarterly costs ---
@@ -71,9 +72,13 @@ export function quarterlyOverhead(headcount: number): number {
   return ECONOMY_TUNING.OVERHEAD_BASE + ECONOMY_TUNING.OVERHEAD_PER_STAFF * headcount;
 }
 
-/** Total quarterly outflow: payroll plus office overhead. */
+/** Total quarterly outflow: payroll plus office overhead, ×config burn rate. */
 export function quarterlyBurn(staff: Staff[]): number {
-  return staff.reduce((s, member) => s + quarterlySalary(member), 0) + quarterlyOverhead(staff.length);
+  return Math.round(
+    (staff.reduce((s, member) => s + quarterlySalary(member), 0) +
+      quarterlyOverhead(staff.length)) *
+      getTuning().burnRate,
+  );
 }
 
 // ---------------------------------------------------------------------------

@@ -28,6 +28,7 @@ import {
   type Workstream,
 } from "./types";
 import { clamp } from "./quality";
+import { getTuning } from "./config";
 import type { ProductionInputs } from "./production";
 import type { Rng } from "./reviews";
 
@@ -291,18 +292,20 @@ function makeEvent(id: ProductionEventId, staff: Staff[]): ProductionEvent {
   }
 }
 
-function updateStaffMeters(staff: Staff, crunching: boolean): Staff {
+/** Crunch/rest meter movement, scaled by the config's morale rates. */
+export function updateStaffMeters(staff: Staff, crunching: boolean): Staff {
   const t = MILESTONE_TUNING;
+  const { crunchToll, recoveryRate } = getTuning();
   return crunching
     ? {
         ...staff,
-        morale: clamp(staff.morale - t.CRUNCH_MORALE_COST, 0, 100),
-        burnout: clamp(staff.burnout + t.CRUNCH_BURNOUT_GAIN, 0, 100),
+        morale: clamp(staff.morale - t.CRUNCH_MORALE_COST * crunchToll, 0, 100),
+        burnout: clamp(staff.burnout + t.CRUNCH_BURNOUT_GAIN * crunchToll, 0, 100),
       }
     : {
         ...staff,
-        morale: clamp(staff.morale + t.REST_MORALE_RECOVERY, 0, 100),
-        burnout: clamp(staff.burnout - t.REST_BURNOUT_RECOVERY, 0, 100),
+        morale: clamp(staff.morale + t.REST_MORALE_RECOVERY * recoveryRate, 0, 100),
+        burnout: clamp(staff.burnout - t.REST_BURNOUT_RECOVERY * recoveryRate, 0, 100),
       };
 }
 

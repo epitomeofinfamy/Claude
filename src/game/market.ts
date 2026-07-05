@@ -36,6 +36,7 @@ import {
   type TrendPhase,
 } from "./types";
 import { clamp } from "./quality";
+import { getTuning } from "./config";
 import type { Rng } from "./reviews";
 
 // ---------------------------------------------------------------------------
@@ -285,8 +286,11 @@ export interface MarketTick {
 
 function stepCurve(curve: HypeCurve, rng: Rng): HypeCurve {
   const t = MARKET_TUNING;
+  // §15 trend cycle speed and §12 market volatility scale the base rates.
+  const pull = t.HYPE_MEAN_PULL * getTuning().trendCycleSpeed;
+  const noise = t.HYPE_NOISE * getTuning().marketVolatility;
   const momentum = clamp(
-    curve.momentum + (50 - curve.level) * t.HYPE_MEAN_PULL + (2 * rng() - 1) * t.HYPE_NOISE,
+    curve.momentum + (50 - curve.level) * pull + (2 * rng() - 1) * noise,
     -t.MOMENTUM_CAP,
     t.MOMENTUM_CAP,
   );

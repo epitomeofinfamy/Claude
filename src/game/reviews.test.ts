@@ -14,6 +14,7 @@ import {
   trendMod,
   type ReviewInputs,
 } from "./reviews";
+import { DEFAULT_TUNING } from "./config";
 import { OUTLETS } from "./data/outlets";
 import type { AxisScores, Outlet } from "./types";
 
@@ -82,8 +83,8 @@ describe("ExpectationMod — the asymmetric tanh (§7.6)", () => {
   });
 
   it("is bounded by the k dials", () => {
-    expect(asymTanh(1000)).toBeLessThanOrEqual(REVIEW_TUNING.EXPECTATION_K_UP);
-    expect(asymTanh(-1000)).toBeGreaterThanOrEqual(-REVIEW_TUNING.EXPECTATION_K_DOWN);
+    expect(asymTanh(1000)).toBeLessThanOrEqual(DEFAULT_TUNING.expectationKUp);
+    expect(asymTanh(-1000)).toBeGreaterThanOrEqual(-DEFAULT_TUNING.expectationKDown);
   });
 });
 
@@ -374,7 +375,7 @@ describe("outlets, variance, and the Metascore (§7.4, §7.5, §7.7)", () => {
     const centered = reviewCritics(plainInputs, OUTLETS, noNoise);
     const unluckiest = reviewCritics(plainInputs, OUTLETS, () => 0);
     for (let i = 0; i < OUTLETS.length; i++) {
-      const bound = OUTLETS[i]!.variance * REVIEW_TUNING.VARIANCE_SCALE;
+      const bound = OUTLETS[i]!.variance * DEFAULT_TUNING.outletVarianceScale;
       expect(luckiest.reviews[i]!.score - centered.reviews[i]!.score).toBeCloseTo(bound);
       expect(centered.reviews[i]!.score - unluckiest.reviews[i]!.score).toBeCloseTo(bound);
     }

@@ -1,5 +1,8 @@
+import { useSyncExternalStore } from "react";
+import { subscribeTuning, tuningVersion } from "../game/config";
 import { useLoopStore } from "../state/loopStore";
 import ConceptionScreen from "./ConceptionScreen";
+import TuningPanel from "./TuningPanel";
 import PreProductionScreen from "./PreProductionScreen";
 import ProductionBoard from "./ProductionBoard";
 import ShipDecisionScreen from "./ShipDecisionScreen";
@@ -26,6 +29,9 @@ export default function App() {
   const phase = useLoopStore((s) => s.state.phase);
   const studio = useLoopStore((s) => s.state.studio);
   const market = useLoopStore((s) => s.state.market);
+  // Re-render the whole tree when a tuning dial moves, so every estimate
+  // and preview recomputes against the live config (dev tuning panel).
+  useSyncExternalStore(subscribeTuning, tuningVersion);
   const Screen = SCREENS[phase];
 
   return (
@@ -48,6 +54,7 @@ export default function App() {
         {phase === "conceive" && <StudioDashboard />}
         <Screen />
       </main>
+      <TuningPanel />
     </div>
   );
 }

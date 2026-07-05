@@ -32,14 +32,16 @@ import {
   type Workstream,
 } from "./types";
 import { clamp, computeQuality } from "./quality";
+import { getTuning } from "./config";
 
 // ---------------------------------------------------------------------------
 // Tuning constants
 // ---------------------------------------------------------------------------
 
 /**
- * The dials that shape how production feels. OVERSCOPE_STEEPNESS is one of
- * the four first-order knobs the GDD says to expose (§15).
+ * The dials that shape how production feels. The overscope penalty
+ * steepness — one of the four §15 first-order knobs — lives in config.ts
+ * and is read at computation time.
  */
 export const PRODUCTION_TUNING = {
   /** Exponent < 1 on effort: diminishing returns on piling effort into one place. */
@@ -59,8 +61,6 @@ export const PRODUCTION_TUNING = {
   /** How fast the fit bonus decays into a penalty as effort misallocates. */
   GENRE_FIT_SPAN: 0.28,
 
-  /** Overscope penalty steepness — §15 first-order tuning knob. */
-  OVERSCOPE_STEEPNESS: 0.35,
   /** Exponent > 1: mild overreach is cheap, wild overreach is brutal. */
   OVERSCOPE_EXPONENT: 1.5,
 
@@ -160,9 +160,10 @@ export function genreFitFactor(
 
 /** ScopeFactor: the overscope penalty (§7.3), ≤ 1, steepening as pressure grows. */
 export function scopeFactor(scopePressure: number): number {
-  const { OVERSCOPE_STEEPNESS, OVERSCOPE_EXPONENT } = PRODUCTION_TUNING;
   const p = clamp(scopePressure, 0, 100) / 100;
-  return 1 - OVERSCOPE_STEEPNESS * Math.pow(p, OVERSCOPE_EXPONENT);
+  return (
+    1 - getTuning().overscopeSteepness * Math.pow(p, PRODUCTION_TUNING.OVERSCOPE_EXPONENT)
+  );
 }
 
 /** CutCornerPenalty per axis: cut features hit Content, shipped bugs hit Polish, crunch hits everything. */

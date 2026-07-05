@@ -37,6 +37,7 @@ import {
   isProductionComplete,
   producerEfficiency,
   toProductionInputs,
+  updateStaffMeters,
   type ProductionRunState,
 } from "./milestones";
 import { produceAxes } from "./production";
@@ -136,16 +137,11 @@ function fixBugs(bugs: number, capacity: number): number {
 
 /** Polish: everyone on stability. Bugs ↓, Polish ↑ — and the release slips. */
 export function applyPolishRound(state: ShipDecisionState): ShipDecisionState {
-  const t = MILESTONE_TUNING;
   const capacity = teamCapacity(state.run, false);
   const run: ProductionRunState = {
     ...state.run,
     progress: { ...state.run.progress, polish: state.run.progress.polish + capacity },
-    staff: state.run.staff.map((s) => ({
-      ...s,
-      morale: clamp(s.morale + t.REST_MORALE_RECOVERY, 0, 100),
-      burnout: clamp(s.burnout - t.REST_BURNOUT_RECOVERY, 0, 100),
-    })),
+    staff: state.run.staff.map((s) => updateStaffMeters(s, false)),
   };
   return {
     ...state,
@@ -162,11 +158,7 @@ export function applyCrunchRound(state: ShipDecisionState, rng: Rng): ShipDecisi
   const capacity = teamCapacity(state.run, true);
 
   // Meters move, then the burned-out roll to quit (same order as production).
-  let staff = state.run.staff.map((s) => ({
-    ...s,
-    morale: clamp(s.morale - t.CRUNCH_MORALE_COST, 0, 100),
-    burnout: clamp(s.burnout + t.CRUNCH_BURNOUT_GAIN, 0, 100),
-  }));
+  let staff = state.run.staff.map((s) => updateStaffMeters(s, true));
   const departedStaff = [...state.run.departedStaff];
   staff = staff.filter((member) => {
     if (member.burnout >= t.BURNOUT_THRESHOLD) {
@@ -212,16 +204,11 @@ export function applyCutScope(state: ShipDecisionState): ShipDecisionState {
 
 /** Delay: the team rests and a later window opens up — hype cools (§6). */
 export function applyDelay(state: ShipDecisionState): ShipDecisionState {
-  const t = MILESTONE_TUNING;
   return {
     ...state,
     run: {
       ...state.run,
-      staff: state.run.staff.map((s) => ({
-        ...s,
-        morale: clamp(s.morale + t.REST_MORALE_RECOVERY, 0, 100),
-        burnout: clamp(s.burnout - t.REST_BURNOUT_RECOVERY, 0, 100),
-      })),
+      staff: state.run.staff.map((s) => updateStaffMeters(s, false)),
     },
     delayedMilestones: state.delayedMilestones + 1,
     hypeCooled: state.hypeCooled + SHIP_TUNING.DELAY_HYPE_COOLING,

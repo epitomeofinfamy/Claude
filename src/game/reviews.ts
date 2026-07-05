@@ -30,6 +30,7 @@ import {
   type TrendPhase,
 } from "./types";
 import { clamp } from "./quality";
+import { getTuning } from "./config";
 
 /** Uniform [0, 1) random source, injected by the caller. */
 export type Rng = () => number;
@@ -41,21 +42,11 @@ export type WindowCrowding = "clear" | "normal" | "crowded";
 // ---------------------------------------------------------------------------
 
 /**
- * Review tuning. Three of the four first-order dials from §15 live here:
- * `k` (split into EXPECTATION_K_UP / EXPECTATION_K_DOWN — the split IS the
- * asymmetry of hype punishment), `scale` (EXPECTATION_SCALE), and the outlet
- * variance bound multiplier (VARIANCE_SCALE). The fourth, overscope penalty
- * steepness, is PRODUCTION_TUNING.OVERSCOPE_STEEPNESS in production.ts.
+ * Review tuning. The §15 first-order dials (ExpectationMod `k`/`scale` and
+ * the outlet variance bound multiplier) live in config.ts and are read at
+ * computation time — see getTuning(). What remains here is fixed structure.
  */
 export const REVIEW_TUNING = {
-  // --- ExpectationMod (§7.6, the marquee mechanic) ---
-  /** Max fractional reward for overdelivering on expectations. */
-  EXPECTATION_K_UP: 0.06,
-  /** Max fractional punishment for falling short — deliberately > K_UP. */
-  EXPECTATION_K_DOWN: 0.14,
-  /** Gap (in Q points) at which the tanh curve approaches saturation. */
-  EXPECTATION_SCALE: 30,
-
   // --- ExpectedQuality inputs (§7.6) ---
   EXPECTED_BASELINE: 30,
   EXPECTED_FROM_HYPE: 0.2,
@@ -83,8 +74,6 @@ export const REVIEW_TUNING = {
   OUTLET_PERSONALITY_WEIGHT: 0.35,
   /** Additive score shift across the harshness range (lenient − harsh). */
   HARSHNESS_POINTS: 6,
-  /** Global multiplier on each outlet's variance bound (±points). */
-  VARIANCE_SCALE: 1,
 
   // --- Metascore (§7.7) ---
   /** Prestige-weighted score stddev at which consensus reads as 0. */
@@ -198,10 +187,10 @@ export function computeExpectedQuality(inputs: ExpectationInputs): number {
  * Returns a signed fraction; ExpectationMod = 1 + asymTanh(gap).
  */
 export function asymTanh(gap: number): number {
-  const { EXPECTATION_K_UP, EXPECTATION_K_DOWN, EXPECTATION_SCALE } = REVIEW_TUNING;
+  const { expectationKUp, expectationKDown, expectationScale } = getTuning();
   return gap >= 0
-    ? EXPECTATION_K_UP * Math.tanh(gap / EXPECTATION_SCALE)
-    : -EXPECTATION_K_DOWN * Math.tanh(-gap / EXPECTATION_SCALE);
+    ? expectationKUp * Math.tanh(gap / expectationScale)
+    : -expectationKDown * Math.tanh(-gap / expectationScale);
 }
 
 export function expectationMod(gap: number): number {
@@ -288,7 +277,7 @@ export function reviewCritics(
       (1 - t.OUTLET_PERSONALITY_WEIGHT) * clamp(inputs.q, 0, 100) +
       t.OUTLET_PERSONALITY_WEIGHT * personality;
     const harshnessAdj = (0.5 - outlet.harshness) * t.HARSHNESS_POINTS;
-    const noise = (2 * rng() - 1) * outlet.variance * t.VARIANCE_SCALE;
+    const noise = (2 * rng() - 1) * outlet.variance * getTuning().outletVarianceScale;
     return {
       outletId: outlet.id,
       outletName: outlet.name,

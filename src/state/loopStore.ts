@@ -34,6 +34,7 @@ import {
   type StudioState,
 } from "../game/loop";
 import { startingResearch, type ResearchKind } from "../game/progression";
+import { getTuning } from "../game/config";
 import type { ConceptDraft } from "../game/conception";
 import type { LaunchPlan } from "../game/shipdecision";
 import type { Specialty, Workstream } from "../game/types";
@@ -59,10 +60,11 @@ function founder(id: string, name: string, specialty: Specialty, skill: number) 
 }
 
 /** 1985. A garage. Four believers, a homebrew engine, and the seed savings
- * that have to last until the first game pays out (GDD §1, §9). */
-const INITIAL_STUDIO: StudioState = {
+ * that have to last until the first game pays out (GDD §1, §9). The cash
+ * cushion comes from the difficulty config (§12). */
+const initialStudio = (): StudioState => ({
   name: "Garage Games",
-  cash: 65_000,
+  cash: getTuning().startingCash,
   reputation: 0,
   year: 1985,
   ipCatalog: [],
@@ -75,7 +77,7 @@ const INITIAL_STUDIO: StudioState = {
   engines: [{ id: "engine-1", name: "HomeBrew 1.0", techLevel: 25 }],
   offices: "garage",
   research: startingResearch(),
-};
+});
 
 interface LoopStore {
   state: LoopState;
@@ -110,7 +112,7 @@ export const useLoopStore = create<LoopStore>()((set) => {
     set((store) => ({ state: transition(store.state) }));
 
   return {
-    state: createLoop(INITIAL_STUDIO),
+    state: createLoop(initialStudio()),
     greenlight: (draft) => apply((s) => greenlightConcept(s, draft)),
     beginProduction: (choices) => apply((s) => beginProduction(s, choices)),
     setAllocation: (ws, value) => apply((s) => setAllocation(s, ws, value)),
@@ -133,6 +135,6 @@ export const useLoopStore = create<LoopStore>()((set) => {
     researchUnlock: (kind, id) => apply((s) => researchUnlock(s, kind, id)),
     hireStaff: (specialty) => apply((s) => hireStaff(s, specialty)),
     startNextProject: () => apply(startNextProject),
-    restart: () => set({ state: createLoop(INITIAL_STUDIO) }),
+    restart: () => set({ state: createLoop(initialStudio()) }),
   };
 });
