@@ -12,18 +12,7 @@ import { toMarketView, upcomingWindows } from "../game/market";
 import { PLATFORM_CATALOG } from "../game/data/platforms";
 import { OUTLETS } from "../game/data/outlets";
 import { useLoopStore } from "../state/loopStore";
-
-function Meter({ label, value, tone }: { label: string; value: number; tone: string }) {
-  return (
-    <div className="flex items-center gap-2 text-xs">
-      <span className="w-24 capitalize text-zinc-500">{label}</span>
-      <div className="h-1.5 flex-1 rounded bg-zinc-800">
-        <div className={`h-1.5 rounded ${tone}`} style={{ width: `${Math.min(100, Math.max(0, value))}%` }} />
-      </div>
-      <span className="w-8 text-right text-zinc-400">{Math.round(value)}</span>
-    </div>
-  );
-}
+import { Meter } from "./components";
 
 const CROWDING_STYLE: Record<string, string> = {
   crowded: "text-red-400",

@@ -8,20 +8,10 @@ import { produceAxes } from "../game/production";
 import { blendGenreProfiles } from "../game/conception";
 import { projectEngine } from "../game/loop";
 import { useLoopStore } from "../state/loopStore";
+import { Meter as SharedMeter } from "./components";
 
-function Meter({ label, value, tone }: { label: string; value: number; tone: string }) {
-  return (
-    <div className="flex items-center gap-2 text-xs">
-      <span className="w-14 text-zinc-500">{label}</span>
-      <div className="h-1.5 flex-1 rounded bg-zinc-800">
-        <div
-          className={`h-1.5 rounded ${tone}`}
-          style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
-        />
-      </div>
-      <span className="w-8 text-right text-zinc-400">{Math.round(value)}</span>
-    </div>
-  );
+function Meter(props: { label: string; value: number; tone: string }) {
+  return <SharedMeter {...props} labelWidth="w-14" />;
 }
 
 function StaffCard({ member }: { member: Staff }) {

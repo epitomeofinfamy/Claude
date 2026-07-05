@@ -1,11 +1,6 @@
 import { AXIS_LABELS } from "../game/postmortem";
 import { useLoopStore } from "../state/loopStore";
-
-function scoreTone(score: number): string {
-  if (score >= 80) return "text-emerald-300";
-  if (score >= 65) return "text-amber-300";
-  return "text-red-300";
-}
+import { scoreTone } from "./components";
 
 export default function PostMortemScreen() {
   const state = useLoopStore((s) => s.state);
