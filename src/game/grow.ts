@@ -29,6 +29,8 @@ export const GROW_TUNING = {
   // --- Reputation (§10: the compounding asset) ---
   REP_META_PIVOT: 65,
   REP_META_WEIGHT: 1 / 3,
+  /** Users grade harder than juries in era 1 — their pivot sits lower. */
+  REP_USER_PIVOT: 58,
   REP_USER_WEIGHT: 1 / 6,
   REP_DELTA_MIN: -10,
   REP_DELTA_MAX: 12,
@@ -78,7 +80,7 @@ export function reputationDelta(metascore: number, userScore: number): number {
   const t = GROW_TUNING;
   return clamp(
     (metascore - t.REP_META_PIVOT) * t.REP_META_WEIGHT +
-      (userScore - t.REP_META_PIVOT) * t.REP_USER_WEIGHT,
+      (userScore - t.REP_USER_PIVOT) * t.REP_USER_WEIGHT,
     t.REP_DELTA_MIN,
     t.REP_DELTA_MAX,
   );

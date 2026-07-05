@@ -63,6 +63,10 @@ export const PRODUCTION_TUNING = {
 
   /** Exponent > 1: mild overreach is cheap, wild overreach is brutal. */
   OVERSCOPE_EXPONENT: 1.5,
+  /** Risk above this level starts straining execution (§7.2: swings can miss). */
+  RISK_PRESSURE_THRESHOLD: 50,
+  /** Scope-pressure points per point of risk over the threshold. */
+  RISK_EXECUTION_PRESSURE: 0.5,
 
   /** CutCornerPenalty points per input point (GDD §6: cuts hit Content, bugs hit Polish). */
   CUT_FEATURES_ON_CONTENT: 0.25,
@@ -224,7 +228,12 @@ export function produceAxes(
     baseFromEffort(ws.tech.effort, ws.tech.skill),
   );
   const fit = genreFitFactor(axisEffort, profile);
-  const scope = scopeFactor(inputs.scopePressure);
+  // Deliberate creative risk feeds Innovation but strains execution — big
+  // swings can miss (§7.2). Without this, max-risk would be a solved combo.
+  const riskStrain =
+    Math.max(0, clamp(inputs.riskTaking, 0, 100) - PRODUCTION_TUNING.RISK_PRESSURE_THRESHOLD) *
+    PRODUCTION_TUNING.RISK_EXECUTION_PRESSURE;
+  const scope = scopeFactor(clamp(inputs.scopePressure + riskStrain, 0, 100));
 
   const axes = {} as AxisScores;
   for (const axis of QUALITY_AXES) {

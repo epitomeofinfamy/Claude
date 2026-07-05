@@ -81,8 +81,8 @@ export const SHIP_TUNING = {
   CUT_BUG_RELIEF: 8,
   CUT_SCHEDULE_RELIEF: 5,
 
-  /** Shipped bugs enter §7.3 as the shippedBugs corner-cut, 1:1. */
-  MARKETING_COST_PER_POINT: 200,
+  /** Dollars per point of marketing hype (§9). */
+  MARKETING_COST_PER_POINT: 140,
 } as const;
 
 // ---------------------------------------------------------------------------

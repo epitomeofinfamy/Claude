@@ -29,6 +29,7 @@ export default function App() {
   const phase = useLoopStore((s) => s.state.phase);
   const studio = useLoopStore((s) => s.state.studio);
   const market = useLoopStore((s) => s.state.market);
+  const restart = useLoopStore((s) => s.restart);
   // Re-render the whole tree when a tuning dial moves, so every estimate
   // and preview recomputes against the live config (dev tuning panel).
   useSyncExternalStore(subscribeTuning, tuningVersion);
@@ -47,6 +48,16 @@ export default function App() {
               ${studio.cash.toLocaleString()}
             </span>{" "}
             · rep {Math.round(studio.reputation)}
+            <button
+              type="button"
+              title="Wipe the save and start over in 1985"
+              onClick={() => {
+                if (window.confirm("Abandon this studio and start a new campaign?")) restart();
+              }}
+              className="ml-3 text-xs text-zinc-600 underline-offset-2 hover:text-zinc-300 hover:underline"
+            >
+              new game
+            </button>
           </span>
         </div>
       </header>

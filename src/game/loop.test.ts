@@ -27,7 +27,7 @@ import {
 import { ECONOMY_TUNING } from "./economy";
 import { startingResearch } from "./progression";
 import { STUDIO_EVENT_TUNING } from "./studioEvents";
-import type { LaunchPlan } from "./shipdecision";
+import { SHIP_TUNING, type LaunchPlan } from "./shipdecision";
 import { isProductionComplete } from "./milestones";
 import type { ConceptDraft } from "./conception";
 import type { Specialty, Staff } from "./types";
@@ -273,7 +273,7 @@ describe("mid-loop bookkeeping", () => {
       { releaseWindow: { year: 1986, quarter: 3 }, marketingHype: 50, price: 50, platforms: ["pc"] },
       () => 0.5,
     );
-    expect(launched.studio.cash).toBe(preLaunchCash - 50 * 200);
+    expect(launched.studio.cash).toBe(preLaunchCash - 50 * SHIP_TUNING.MARKETING_COST_PER_POINT);
   });
 });
 

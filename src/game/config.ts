@@ -137,6 +137,13 @@ export function resetTuning(): void {
   applyDifficulty("standard");
 }
 
+/** Restore a saved dial set wholesale (save/load). */
+export function hydrateTuning(config: TuningConfig, tier: Difficulty): void {
+  active = { ...config };
+  difficulty = tier;
+  notify();
+}
+
 /** Subscription for UI (useSyncExternalStore-compatible). */
 export function subscribeTuning(listener: () => void): () => void {
   listeners.add(listener);

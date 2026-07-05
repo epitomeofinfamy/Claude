@@ -34,7 +34,8 @@ import {
   type StudioState,
 } from "../game/loop";
 import { startingResearch, type ResearchKind } from "../game/progression";
-import { getTuning } from "../game/config";
+import { getTuning, hydrateTuning } from "../game/config";
+import { parseSave, serializeSave } from "../game/save";
 import type { ConceptDraft } from "../game/conception";
 import type { LaunchPlan } from "../game/shipdecision";
 import type { Specialty, Workstream } from "../game/types";
@@ -79,6 +80,36 @@ const initialStudio = (): StudioState => ({
   research: startingResearch(),
 });
 
+const SAVE_KEY = "going-gold:save";
+
+function persist(state: LoopState): void {
+  try {
+    if (typeof localStorage === "undefined") return;
+    localStorage.setItem(SAVE_KEY, serializeSave(state));
+  } catch {
+    // Storage full or blocked — the game keeps running unsaved.
+  }
+}
+
+/** Boot: resume the saved campaign (restoring its dials) or start fresh. */
+function loadInitial(): LoopState {
+  try {
+    if (typeof localStorage !== "undefined") {
+      const json = localStorage.getItem(SAVE_KEY);
+      if (json) {
+        const save = parseSave(json);
+        if (save) {
+          hydrateTuning(save.tuning, save.difficulty);
+          return save.state;
+        }
+      }
+    }
+  } catch {
+    // Fall through to a fresh campaign.
+  }
+  return createLoop(initialStudio());
+}
+
 interface LoopStore {
   state: LoopState;
   greenlight: (draft: ConceptDraft) => void;
@@ -103,7 +134,7 @@ interface LoopStore {
   researchUnlock: (kind: ResearchKind, id: string) => void;
   hireStaff: (specialty: Specialty) => void;
   startNextProject: () => void;
-  /** After bankruptcy: back to 1985, fresh garage. */
+  /** Back to 1985, fresh garage — also wipes the save. */
   restart: () => void;
 }
 
@@ -112,7 +143,7 @@ export const useLoopStore = create<LoopStore>()((set) => {
     set((store) => ({ state: transition(store.state) }));
 
   return {
-    state: createLoop(initialStudio()),
+    state: loadInitial(),
     greenlight: (draft) => apply((s) => greenlightConcept(s, draft)),
     beginProduction: (choices) => apply((s) => beginProduction(s, choices)),
     setAllocation: (ws, value) => apply((s) => setAllocation(s, ws, value)),
@@ -135,6 +166,16 @@ export const useLoopStore = create<LoopStore>()((set) => {
     researchUnlock: (kind, id) => apply((s) => researchUnlock(s, kind, id)),
     hireStaff: (specialty) => apply((s) => hireStaff(s, specialty)),
     startNextProject: () => apply(startNextProject),
-    restart: () => set({ state: createLoop(initialStudio()) }),
+    restart: () => {
+      try {
+        if (typeof localStorage !== "undefined") localStorage.removeItem(SAVE_KEY);
+      } catch {
+        // Nothing to clear.
+      }
+      set({ state: createLoop(initialStudio()) });
+    },
   };
 });
+
+// Auto-save: every machine transition persists the campaign.
+useLoopStore.subscribe((store) => persist(store.state));
