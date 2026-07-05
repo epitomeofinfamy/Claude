@@ -148,8 +148,10 @@ describe("the §3 core loop, end to end", () => {
     // The well-received original became franchise IP…
     expect(grow.growth!.ip).not.toBeNull();
     expect(grow.studio.ipCatalog).toHaveLength(1);
-    // …the year moved to the release window, and downtime healed the team.
-    expect(grow.studio.year).toBe(1986);
+    // …the calendar moved with market time (milestones + the polish slip),
+    // and downtime healed the team.
+    expect(grow.studio.year).toBeGreaterThanOrEqual(1986);
+    expect(grow.market.year).toBe(grow.studio.year);
     for (const member of grow.studio.staff) {
       expect(member.burnout).toBeLessThanOrEqual(5);
     }

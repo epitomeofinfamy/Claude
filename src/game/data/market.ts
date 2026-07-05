@@ -1,8 +1,7 @@
 /**
- * Placeholder market state for the conception screen's research signal.
- * This is a static 1985 snapshot — the real, moving market simulation
- * (GDD §8, trends/lifecycles/saturation/competitors) is Phase 3 work and
- * will replace every consumer of this stub.
+ * A static 1985 Market snapshot, kept as a deterministic fixture for tests.
+ * The live game uses the §8 simulation in src/game/market.ts (via
+ * toMarketView); nothing in the UI reads this anymore.
  */
 
 import type { Market } from "../types";

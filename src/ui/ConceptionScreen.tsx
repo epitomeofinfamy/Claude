@@ -1,6 +1,6 @@
 import { GENRES, PLATFORMS, SCOPE_TIERS, TOPICS } from "../game/types";
 import { PLATFORM_CATALOG } from "../game/data/platforms";
-import { STUB_MARKET } from "../game/data/market";
+import { toMarketView } from "../game/market";
 import { researchTrendFit, validateConcept } from "../game/conception";
 import { useConceptionStore } from "../state/conceptionStore";
 import { useLoopStore } from "../state/loopStore";
@@ -65,12 +65,13 @@ export default function ConceptionScreen() {
   const draft = useConceptionStore((s) => s.draft);
   const store = useConceptionStore();
   const ipCatalog = useLoopStore((s) => s.state.studio.ipCatalog);
+  const marketSim = useLoopStore((s) => s.state.market);
   const greenlight = useLoopStore((s) => s.greenlight);
 
   const problems = validateConcept(draft, ipCatalog);
   const research =
     draft.genres.length > 0 && draft.topic !== null
-      ? researchTrendFit(draft.genres, draft.topic, STUB_MARKET)
+      ? researchTrendFit(draft.genres, draft.topic, toMarketView(marketSim))
       : null;
 
   return (

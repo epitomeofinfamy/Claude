@@ -23,10 +23,19 @@ import {
   advanceMilestone,
   createProductionRun,
   isProductionComplete,
+  makePoachingEvent,
   resolveProductionEvent,
   type ProductionNotice,
   type ProductionRunState,
 } from "./milestones";
+import {
+  advanceMarketQuarter,
+  createMarketSim,
+  installBases,
+  recordRelease,
+  toMarketView,
+  type MarketSimState,
+} from "./market";
 import {
   applyCrunchRound,
   applyCutScope,
@@ -40,7 +49,6 @@ import {
   type ShipDecisionState,
 } from "./shipdecision";
 import { computeSales, GROW_TUNING, reputationDelta, updateIpCatalog } from "./grow";
-import { STUB_MARKET } from "./data/market";
 import { OUTLETS } from "./data/outlets";
 import type { Rng } from "./reviews";
 
@@ -87,6 +95,8 @@ export interface GrowthReport {
 export interface LoopState {
   phase: LoopPhase;
   studio: StudioState;
+  /** The living §8 market simulation; one production milestone = one quarter. */
+  market: MarketSimState;
   /** Monotonic id source for games/IPs. */
   projectCounter: number;
   game: Game | null;
@@ -101,10 +111,11 @@ export interface LoopState {
   lastNotices: ProductionNotice[];
 }
 
-export function createLoop(studio: StudioState): LoopState {
+export function createLoop(studio: StudioState, market: MarketSimState = createMarketSim()): LoopState {
   return {
     phase: "conceive",
     studio,
+    market,
     projectCounter: 1,
     game: null,
     riskTaking: 50,
@@ -114,6 +125,30 @@ export function createLoop(studio: StudioState): LoopState {
     reveal: null,
     growth: null,
     lastNotices: [],
+  };
+}
+
+/**
+ * One quarter of market time passes (production milestones and release
+ * slips cost calendar time; crunch is how you dodge that). Market news
+ * joins the notices; a rival raid is returned for the caller to stage.
+ */
+function tickMarket(
+  state: LoopState,
+  rng: Rng,
+): { state: LoopState; poachRaidBy: string | null } {
+  const tick = advanceMarketQuarter(state.market, rng);
+  return {
+    state: {
+      ...state,
+      market: tick.sim,
+      studio: { ...state.studio, year: tick.sim.year },
+      lastNotices: [
+        ...state.lastNotices,
+        ...tick.news.map((text) => ({ kind: "market" as const, text })),
+      ],
+    },
+    poachRaidBy: tick.poachRaidBy,
   };
 }
 
@@ -200,7 +235,19 @@ export function advanceProduction(state: LoopState, rng: Rng): LoopState {
   expectPhase(state, "production");
   if (!state.run) throw new Error("No production run");
   const { run, notices } = advanceMilestone(state.run, rng);
-  return { ...state, run, lastNotices: notices };
+  const ticked = tickMarket({ ...state, run, lastNotices: notices }, rng);
+  let next = ticked.state;
+  // A rival raid from the market becomes a §5 poaching event, if the
+  // milestone didn't already interrupt with something.
+  if (ticked.poachRaidBy && next.run && !next.run.pendingEvent && next.run.staff.length > 0) {
+    const event = makePoachingEvent(next.run.staff, ticked.poachRaidBy);
+    next = {
+      ...next,
+      run: { ...next.run, pendingEvent: event },
+      lastNotices: [...next.lastNotices, { kind: "event", text: event.text }],
+    };
+  }
+  return next;
 }
 
 export function resolveEvent(state: LoopState, optionId: string, rng: Rng): LoopState {
@@ -240,9 +287,13 @@ function applyShipLever(
   return { ...state, ship: next, studio: { ...state.studio, cash: state.studio.cash - spent } };
 }
 
-export const shipPolish = (state: LoopState) => applyShipLever(state, applyPolishRound);
+/** Polish rounds and delays slip the calendar — the market moves on (§6). */
+export const shipPolish = (state: LoopState, rng: Rng = () => 0.5) =>
+  tickMarket(applyShipLever({ ...state, lastNotices: [] }, applyPolishRound), rng).state;
+export const shipDelay = (state: LoopState, rng: Rng = () => 0.5) =>
+  tickMarket(applyShipLever({ ...state, lastNotices: [] }, applyDelay), rng).state;
+/** Cutting scope and crunching are how you ship without losing the quarter. */
 export const shipCutScope = (state: LoopState) => applyShipLever(state, applyCutScope);
-export const shipDelay = (state: LoopState) => applyShipLever(state, applyDelay);
 export const shipCrunch = (state: LoopState, rng: Rng) =>
   applyShipLever(state, (s) => applyCrunchRound(s, rng));
 
@@ -254,8 +305,8 @@ export function launch(
   state: LoopState,
   plan: LaunchPlan,
   rng: Rng,
-  market: Market = STUB_MARKET,
   outlets: Outlet[] = OUTLETS,
+  marketOverride?: Market,
 ): LoopState {
   expectPhase(state, "ship");
   if (!state.game || !state.ship) throw new Error("Nothing to launch");
@@ -265,7 +316,7 @@ export function launch(
   const result = launchGame(state.ship, plan, {
     game: state.game,
     genreProfile: blendGenreProfiles(state.game.genres),
-    market,
+    market: marketOverride ?? toMarketView(state.market),
     outlets,
     engineTechLevel: projectEngine(state).techLevel,
     riskTaking: state.riskTaking,
@@ -279,6 +330,8 @@ export function launch(
     phase: "reception",
     game: result.game,
     launch: result,
+    // The market absorbs your release too — flood a genre and it fatigues (§8).
+    market: recordRelease(state.market, result.game.genres),
     studio: { ...state.studio, cash: state.studio.cash - marketingCost },
     reveal: {
       totalReviews: result.reception.reviews.length,
@@ -339,6 +392,7 @@ export function completePostMortem(state: LoopState): LoopState {
     marketingHype: result.game.marketingSpend,
     price: result.receptionState.price,
     platforms: result.game.platforms,
+    installBases: installBases(state.market),
   });
   const repDelta = reputationDelta(result.reception.metascore, result.userScore);
   const ipUpdate = updateIpCatalog(
@@ -370,7 +424,7 @@ export function completePostMortem(state: LoopState): LoopState {
       ...state.studio,
       cash: state.studio.cash + sales.revenue,
       reputation: clamp(state.studio.reputation + repDelta, 0, 100),
-      year: result.game.releaseWindow.year,
+      year: Math.max(state.studio.year, result.game.releaseWindow.year),
       ipCatalog: ipUpdate.catalog,
       staff,
     },

@@ -54,10 +54,12 @@ export function computeSales(args: {
   marketingHype: number;
   price: number;
   platforms: Platform[];
+  /** Live per-platform install bases (§8 lifecycles); catalog seeds if omitted. */
+  installBases?: Partial<Record<Platform, number>>;
 }): SalesResult {
   const t = GROW_TUNING;
   const installBase = args.platforms.reduce(
-    (s, p) => s + PLATFORM_CATALOG[p].installBase,
+    (s, p) => s + (args.installBases?.[p] ?? PLATFORM_CATALOG[p].installBase),
     0,
   );
   const metaMult = (clamp(args.metascore, 0, 100) / t.META_SALES_PIVOT) ** 2;

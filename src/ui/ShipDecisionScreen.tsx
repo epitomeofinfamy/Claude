@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { QUALITY_AXES, PLATFORMS, type ReleaseWindow } from "../game/types";
+import { QUALITY_AXES, PLATFORMS } from "../game/types";
 import { MILESTONE_TUNING } from "../game/milestones";
 import {
   deriveWindowCrowding,
@@ -8,8 +8,8 @@ import {
 } from "../game/shipdecision";
 import { blendGenreProfiles } from "../game/conception";
 import { projectEngine } from "../game/loop";
+import { toMarketView, upcomingWindows } from "../game/market";
 import { PLATFORM_CATALOG } from "../game/data/platforms";
-import { STUB_MARKET } from "../game/data/market";
 import { OUTLETS } from "../game/data/outlets";
 import { useLoopStore } from "../state/loopStore";
 
@@ -25,22 +25,6 @@ function Meter({ label, value, tone }: { label: string; value: number; tone: str
   );
 }
 
-/** The next six quarters from the studio's current year. */
-function upcomingWindows(fromYear: number): ReleaseWindow[] {
-  const windows: ReleaseWindow[] = [];
-  let year = fromYear;
-  let quarter = 4;
-  for (let i = 0; i < 6; i++) {
-    windows.push({ year, quarter: quarter as ReleaseWindow["quarter"] });
-    quarter++;
-    if (quarter > 4) {
-      quarter = 1;
-      year++;
-    }
-  }
-  return windows;
-}
-
 const CROWDING_STYLE: Record<string, string> = {
   crowded: "text-red-400",
   normal: "text-zinc-400",
@@ -51,8 +35,9 @@ export default function ShipDecisionScreen() {
   const state = useLoopStore((s) => s.state);
   const store = useLoopStore();
   const { game, ship, studio } = state;
+  const marketView = toMarketView(state.market);
   const [plan, setPlan] = useState<LaunchPlan>(() => ({
-    releaseWindow: { year: studio.year + 1, quarter: 1 },
+    releaseWindow: upcomingWindows(state.market, 1)[0]!,
     marketingHype: 40,
     price: 50,
     platforms: game ? [...game.platforms] : ["pc"],
@@ -64,7 +49,7 @@ export default function ShipDecisionScreen() {
   const estimate = estimateReception(ship, plan, {
     game,
     genreProfile: blendGenreProfiles(game.genres),
-    market: STUB_MARKET,
+    market: marketView,
     outlets: OUTLETS,
     engineTechLevel: projectEngine(state).techLevel,
     riskTaking: state.riskTaking,
@@ -162,11 +147,11 @@ export default function ShipDecisionScreen() {
         <div className="space-y-1">
           <p className="text-xs text-zinc-500">Release window — the competitive calendar</p>
           <div className="flex flex-wrap gap-2">
-            {upcomingWindows(studio.year).map((w) => {
-              const crowding = deriveWindowCrowding(STUB_MARKET, w);
+            {upcomingWindows(state.market, 6).map((w) => {
+              const crowding = deriveWindowCrowding(marketView, w);
               const selected =
                 plan.releaseWindow.year === w.year && plan.releaseWindow.quarter === w.quarter;
-              const rivals = STUB_MARKET.competitorCalendar.filter(
+              const rivals = marketView.competitorCalendar.filter(
                 (c) => c.releaseWindow.year === w.year && c.releaseWindow.quarter === w.quarter,
               );
               return (

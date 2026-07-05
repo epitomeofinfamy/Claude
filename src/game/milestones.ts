@@ -115,7 +115,7 @@ export interface ProductionEvent {
 }
 
 export interface ProductionNotice {
-  kind: "quit" | "event" | "milestone";
+  kind: "quit" | "event" | "milestone" | "market";
   text: string;
 }
 
@@ -247,6 +247,25 @@ const EVENT_ORDER: ProductionEventId[] = [
   "feature-creep",
 ];
 
+/**
+ * A poaching attempt aimed at the team's top specialist (§5, §8). Exported
+ * so the market simulation's competitor raids can raise the same event.
+ */
+export function makePoachingEvent(staff: Staff[], rivalName = "A rival studio"): ProductionEvent {
+  const target = staff.reduce((best, s) =>
+    s.skills[s.specialty] > best.skills[best.specialty] ? s : best,
+  );
+  return {
+    id: "poaching-attempt",
+    text: `${rivalName} is poaching ${target.name}.`,
+    targetStaffId: target.id,
+    options: [
+      { id: "counter-offer", label: "Counter-offer (costs cash, morale ↑)" },
+      { id: "let-ride", label: "Refuse to bid — risk losing them" },
+    ],
+  };
+}
+
 function makeEvent(id: ProductionEventId, staff: Staff[]): ProductionEvent {
   switch (id) {
     case "design-breakthrough":
@@ -258,20 +277,8 @@ function makeEvent(id: ProductionEventId, staff: Staff[]): ProductionEvent {
           { id: "ship-safe", label: "Ship the safe version" },
         ],
       };
-    case "poaching-attempt": {
-      const target = staff.reduce((best, s) =>
-        s.skills[s.specialty] > best.skills[best.specialty] ? s : best,
-      );
-      return {
-        id,
-        text: `A rival studio is poaching ${target.name}.`,
-        targetStaffId: target.id,
-        options: [
-          { id: "counter-offer", label: "Counter-offer (costs cash, morale ↑)" },
-          { id: "let-ride", label: "Refuse to bid — risk losing them" },
-        ],
-      };
-    }
+    case "poaching-attempt":
+      return makePoachingEvent(staff);
     case "feature-creep":
       return {
         id,
