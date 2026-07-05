@@ -2,6 +2,7 @@ import { GENRES, PLATFORMS, SCOPE_TIERS, TOPICS } from "../game/types";
 import { PLATFORM_CATALOG } from "../game/data/platforms";
 import { toMarketView } from "../game/market";
 import { researchTrendFit, validateConcept } from "../game/conception";
+import { allowedScopeTiers, conceptLocks } from "../game/progression";
 import { useConceptionStore } from "../state/conceptionStore";
 import { useLoopStore } from "../state/loopStore";
 
@@ -65,10 +66,15 @@ export default function ConceptionScreen() {
   const draft = useConceptionStore((s) => s.draft);
   const store = useConceptionStore();
   const ipCatalog = useLoopStore((s) => s.state.studio.ipCatalog);
+  const researched = useLoopStore((s) => s.state.studio.research);
+  const offices = useLoopStore((s) => s.state.studio.offices);
   const marketSim = useLoopStore((s) => s.state.market);
   const greenlight = useLoopStore((s) => s.greenlight);
 
-  const problems = validateConcept(draft, ipCatalog);
+  const problems = [
+    ...validateConcept(draft, ipCatalog),
+    ...conceptLocks(draft, researched, offices),
+  ];
   const research =
     draft.genres.length > 0 && draft.topic !== null
       ? researchTrendFit(draft.genres, draft.topic, toMarketView(marketSim))
@@ -113,45 +119,72 @@ export default function ConceptionScreen() {
         )}
       </Section>
 
-      <Section title="Genre" hint="pick one, or two for a hybrid">
-        {GENRES.map((genre) => (
-          <Chip
-            key={genre}
-            selected={draft.genres.includes(genre)}
-            disabled={!draft.genres.includes(genre) && draft.genres.length >= 2}
-            onClick={() => store.toggleGenre(genre)}
-          >
-            {GENRE_LABELS[genre] ?? label(genre)}
-          </Chip>
-        ))}
+      <Section title="Genre" hint="pick one, or two for a hybrid · 🔒 = research it first">
+        {GENRES.map((genre) => {
+          const locked = !researched.genres.includes(genre);
+          return (
+            <Chip
+              key={genre}
+              selected={draft.genres.includes(genre)}
+              disabled={locked || (!draft.genres.includes(genre) && draft.genres.length >= 2)}
+              onClick={() => store.toggleGenre(genre)}
+            >
+              {locked && "🔒 "}
+              {GENRE_LABELS[genre] ?? label(genre)}
+            </Chip>
+          );
+        })}
       </Section>
 
       <Section title="Topic">
-        {TOPICS.map((topic) => (
-          <Chip key={topic} selected={draft.topic === topic} onClick={() => store.setTopic(topic)}>
-            {label(topic)}
-          </Chip>
-        ))}
+        {TOPICS.map((topic) => {
+          const locked = !researched.topics.includes(topic);
+          return (
+            <Chip
+              key={topic}
+              selected={draft.topic === topic}
+              disabled={locked}
+              onClick={() => store.setTopic(topic)}
+            >
+              {locked && "🔒 "}
+              {label(topic)}
+            </Chip>
+          );
+        })}
       </Section>
 
       <Section title="Platforms">
-        {PLATFORMS.map((platform) => (
-          <Chip
-            key={platform}
-            selected={draft.platforms.includes(platform)}
-            onClick={() => store.togglePlatform(platform)}
-          >
-            {PLATFORM_CATALOG[platform].name}
-          </Chip>
-        ))}
+        {PLATFORMS.map((platform) => {
+          const locked = !researched.platforms.includes(platform);
+          return (
+            <Chip
+              key={platform}
+              selected={draft.platforms.includes(platform)}
+              disabled={locked}
+              onClick={() => store.togglePlatform(platform)}
+            >
+              {locked && "🔒 "}
+              {PLATFORM_CATALOG[platform].name}
+            </Chip>
+          );
+        })}
       </Section>
 
-      <Section title="Scope / budget tier">
-        {SCOPE_TIERS.map((tier) => (
-          <Chip key={tier} selected={draft.scopeTier === tier} onClick={() => store.setScopeTier(tier)}>
-            {TIER_LABELS[tier] ?? label(tier)}
-          </Chip>
-        ))}
+      <Section title="Scope / budget tier" hint={`your ${offices} office sets the ceiling`}>
+        {SCOPE_TIERS.map((tier) => {
+          const locked = !allowedScopeTiers(offices).includes(tier);
+          return (
+            <Chip
+              key={tier}
+              selected={draft.scopeTier === tier}
+              disabled={locked}
+              onClick={() => store.setScopeTier(tier)}
+            >
+              {locked && "🔒 "}
+              {TIER_LABELS[tier] ?? label(tier)}
+            </Chip>
+          );
+        })}
       </Section>
 
       {research && (

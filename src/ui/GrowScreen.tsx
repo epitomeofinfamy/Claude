@@ -1,4 +1,13 @@
-import { ECONOMY_TUNING, trainingCost } from "../game/economy";
+import { ECONOMY_TUNING, quarterlySalary, trainingCost } from "../game/economy";
+import {
+  PROGRESSION_TUNING,
+  engineCeiling,
+  lockedResearch,
+  makeCandidate,
+  maxStaff,
+  officeUpgrade,
+} from "../game/progression";
+import { SPECIALTIES } from "../game/types";
 import { useLoopStore } from "../state/loopStore";
 
 export default function GrowScreen() {
@@ -10,6 +19,12 @@ export default function GrowScreen() {
 
   const engineCost = ECONOMY_TUNING.ENGINE_UPGRADE_COST;
   const trainCost = trainingCost(studio.staff.length);
+  const ceiling = engineCeiling(studio.offices);
+  const move = officeUpgrade(studio.offices);
+  const locked = lockedResearch(studio.research);
+  const desksLeft = maxStaff(studio.offices) - studio.staff.length;
+  const candidate = makeCandidate("designer", studio.reputation, "preview");
+  const hireCost = PROGRESSION_TUNING.HIRE_COST_QUARTERS * quarterlySalary(candidate);
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -93,7 +108,97 @@ export default function GrowScreen() {
               with skill)
             </p>
           </button>
+          {move && (
+            <button
+              type="button"
+              disabled={studio.cash < move.cost || studio.reputation < move.reputationGate}
+              onClick={store.upgradeOffice}
+              className="rounded-md border border-zinc-700 px-3 py-2 text-left text-sm hover:border-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <p className="font-medium">
+                Move to a {move.to} office — ${move.cost.toLocaleString()}
+              </p>
+              <p className="text-xs text-zinc-500">
+                {studio.reputation < move.reputationGate
+                  ? `Needs reputation ${move.reputationGate} (now ${Math.round(studio.reputation)})`
+                  : `Desks for ${maxStaff(move.to)}, engine ceiling ${engineCeiling(move.to)}, bigger scopes`}
+              </p>
+            </button>
+          )}
         </div>
+        <p className="text-xs text-zinc-600">
+          {studio.offices} office · {studio.staff.length}/{maxStaff(studio.offices)} desks ·
+          engine ceiling {ceiling}
+        </p>
+      </section>
+
+      {(locked.genres.length > 0 || locked.topics.length > 0 || locked.platforms.length > 0) && (
+        <section className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400">
+            Research (§10)
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            {locked.genres.map((g) => (
+              <button
+                key={g.id}
+                type="button"
+                disabled={studio.cash < g.cost}
+                onClick={() => store.researchUnlock("genre", g.id)}
+                className="rounded-full border border-zinc-700 px-3 py-1 text-sm capitalize text-zinc-300 hover:border-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {g.id} · ${g.cost.toLocaleString()}
+              </button>
+            ))}
+            {locked.topics.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                disabled={studio.cash < t.cost}
+                onClick={() => store.researchUnlock("topic", t.id)}
+                className="rounded-full border border-zinc-700 px-3 py-1 text-sm capitalize text-zinc-300 hover:border-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {t.id} · ${t.cost.toLocaleString()}
+              </button>
+            ))}
+            {locked.platforms.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                disabled={studio.cash < p.cost}
+                onClick={() => store.researchUnlock("platform", p.id)}
+                className="rounded-full border border-zinc-700 px-3 py-1 text-sm capitalize text-zinc-300 hover:border-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {p.id} · ${p.cost.toLocaleString()}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400">
+          Hiring — reputation {Math.round(studio.reputation)} attracts skill ~
+          {candidate.skills.designer}
+        </h2>
+        {desksLeft <= 0 ? (
+          <p className="text-sm text-zinc-500">
+            No desks left in the {studio.offices} office — upgrade to grow the team.
+          </p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {SPECIALTIES.map((specialty) => (
+              <button
+                key={specialty}
+                type="button"
+                disabled={studio.cash < hireCost}
+                onClick={() => store.hireStaff(specialty)}
+                className="rounded-full border border-zinc-700 px-3 py-1 text-sm capitalize text-zinc-300 hover:border-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                + {specialty} · ${hireCost.toLocaleString()}
+              </button>
+            ))}
+          </div>
+        )}
       </section>
 
       <button

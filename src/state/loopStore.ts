@@ -14,8 +14,10 @@ import {
   enterShipDecision,
   finishReveal,
   greenlightConcept,
+  hireStaff,
   investInEngine,
   launch,
+  researchUnlock,
   resolveEvent,
   setAllocation,
   setCrunch,
@@ -25,10 +27,12 @@ import {
   shipPolish,
   startNextProject,
   trainTeam,
+  upgradeOffice,
   type LoopState,
   type PreProductionChoices,
   type StudioState,
 } from "../game/loop";
+import { startingResearch, type ResearchKind } from "../game/progression";
 import type { ConceptDraft } from "../game/conception";
 import type { LaunchPlan } from "../game/shipdecision";
 import type { Specialty, Workstream } from "../game/types";
@@ -68,6 +72,8 @@ const INITIAL_STUDIO: StudioState = {
     founder("staff-4", "Ana Volkov", "writer", 55),
   ],
   engines: [{ id: "engine-1", name: "HomeBrew 1.0", techLevel: 25 }],
+  offices: "garage",
+  research: startingResearch(),
 };
 
 interface LoopStore {
@@ -89,6 +95,9 @@ interface LoopStore {
   completePostMortem: () => void;
   investInEngine: () => void;
   trainTeam: () => void;
+  upgradeOffice: () => void;
+  researchUnlock: (kind: ResearchKind, id: string) => void;
+  hireStaff: (specialty: Specialty) => void;
   startNextProject: () => void;
   /** After bankruptcy: back to 1985, fresh garage. */
   restart: () => void;
@@ -117,6 +126,9 @@ export const useLoopStore = create<LoopStore>()((set) => {
     completePostMortem: () => apply(completePostMortem),
     investInEngine: () => apply(investInEngine),
     trainTeam: () => apply(trainTeam),
+    upgradeOffice: () => apply(upgradeOffice),
+    researchUnlock: (kind, id) => apply((s) => researchUnlock(s, kind, id)),
+    hireStaff: (specialty) => apply((s) => hireStaff(s, specialty)),
     startNextProject: () => apply(startNextProject),
     restart: () => set({ state: createLoop(INITIAL_STUDIO) }),
   };

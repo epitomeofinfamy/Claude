@@ -16,7 +16,17 @@
  * dramatic beat, not a stat dump.
  */
 
-import type { Engine, Game, Ip, Market, Outlet, Staff, Workstream } from "./types";
+import type {
+  Engine,
+  Game,
+  Ip,
+  Market,
+  OfficeTier,
+  Outlet,
+  Specialty,
+  Staff,
+  Workstream,
+} from "./types";
 import { clamp } from "./quality";
 import { greenlightGame, validateConcept, blendGenreProfiles, type ConceptDraft } from "./conception";
 import {
@@ -60,6 +70,18 @@ import {
   type FundingKind,
   type PublisherOffer,
 } from "./economy";
+import {
+  conceptLocks,
+  engineCeiling,
+  makeCandidate,
+  maxStaff,
+  officeUpgrade,
+  PROGRESSION_TUNING,
+  type ResearchKind,
+  type ResearchState,
+} from "./progression";
+import { quarterlySalary } from "./economy";
+import { GENRES, PLATFORMS, TOPICS } from "./types";
 import { OUTLETS } from "./data/outlets";
 import type { Rng } from "./reviews";
 
@@ -86,6 +108,10 @@ export interface StudioState {
   ipCatalog: Ip[];
   staff: Staff[];
   engines: Engine[];
+  /** Growth tier: gates team size, engine ceiling, project scope (§10). */
+  offices: OfficeTier;
+  /** What the studio knows how to make (§10 research tree). */
+  research: ResearchState;
 }
 
 /** The staggered reveal (§3 beat 6). */
@@ -224,7 +250,10 @@ export function projectEngine(state: LoopState): Engine {
 
 export function greenlightConcept(state: LoopState, draft: ConceptDraft): LoopState {
   expectPhase(state, "conceive");
-  const problems = validateConcept(draft, state.studio.ipCatalog);
+  const problems = [
+    ...validateConcept(draft, state.studio.ipCatalog),
+    ...conceptLocks(draft, state.studio.research, state.studio.offices),
+  ];
   if (problems.length > 0) {
     throw new Error(`Concept not ready: ${problems.join(" ")}`);
   }
@@ -554,11 +583,20 @@ function mergeTails(a: number[], b: number[]): number[] {
 // Reinvestment (§3 beat 8, §9 costs)
 // ---------------------------------------------------------------------------
 
-/** Engine R&D: raises the tech ceiling for every future project (§10). */
+/**
+ * Engine R&D: raises the Presentation/Polish tech ceiling for every future
+ * project (§7.3, §10) — up to what the current office can support.
+ */
 export function investInEngine(state: LoopState): LoopState {
   expectPhase(state, "grow");
   const engine = state.studio.engines[0];
   if (!engine) throw new Error("The studio has no engine");
+  const ceiling = engineCeiling(state.studio.offices);
+  if (engine.techLevel >= ceiling) {
+    throw new Error(
+      `${engine.name} is at the ${state.studio.offices} office's tech ceiling (${ceiling}) — upgrade the office first`,
+    );
+  }
   const cost = ECONOMY_TUNING.ENGINE_UPGRADE_COST;
   if (state.studio.cash < cost) throw new Error("Not enough cash for engine R&D");
   return {
@@ -569,10 +607,89 @@ export function investInEngine(state: LoopState): LoopState {
       engines: [
         {
           ...engine,
-          techLevel: clamp(engine.techLevel + ECONOMY_TUNING.ENGINE_UPGRADE_TECH_GAIN, 0, 100),
+          techLevel: clamp(
+            engine.techLevel + ECONOMY_TUNING.ENGINE_UPGRADE_TECH_GAIN,
+            0,
+            ceiling,
+          ),
         },
         ...state.studio.engines.slice(1),
       ],
+    },
+  };
+}
+
+/** The move up: a bigger office gates open team size, engine, and scope (§10). */
+export function upgradeOffice(state: LoopState): LoopState {
+  expectPhase(state, "grow");
+  const upgrade = officeUpgrade(state.studio.offices);
+  if (!upgrade) throw new Error("There is no office bigger than this");
+  if (state.studio.reputation < upgrade.reputationGate) {
+    throw new Error(
+      `Reputation ${Math.round(state.studio.reputation)} won't open a ${upgrade.to} office (needs ${upgrade.reputationGate})`,
+    );
+  }
+  if (state.studio.cash < upgrade.cost) throw new Error("Not enough cash for the move");
+  return {
+    ...state,
+    studio: {
+      ...state.studio,
+      cash: state.studio.cash - upgrade.cost,
+      offices: upgrade.to,
+    },
+  };
+}
+
+/** Research a genre, topic, or platform (§10 research tree). */
+export function researchUnlock(state: LoopState, kind: ResearchKind, id: string): LoopState {
+  expectPhase(state, "grow");
+  const research = state.studio.research;
+  const valid: Record<ResearchKind, readonly string[]> = {
+    genre: GENRES,
+    topic: TOPICS,
+    platform: PLATFORMS,
+  };
+  if (!valid[kind].includes(id)) throw new Error(`Unknown ${kind} "${id}"`);
+  const list = { genre: research.genres, topic: research.topics, platform: research.platforms }[
+    kind
+  ] as string[];
+  if (list.includes(id)) throw new Error(`${id} is already researched`);
+  const cost = PROGRESSION_TUNING.RESEARCH_COST[kind];
+  if (state.studio.cash < cost) throw new Error(`Not enough cash to research ${id}`);
+  return {
+    ...state,
+    studio: {
+      ...state.studio,
+      cash: state.studio.cash - cost,
+      research: {
+        genres: kind === "genre" ? [...research.genres, id as never] : research.genres,
+        topics: kind === "topic" ? [...research.topics, id as never] : research.topics,
+        platforms:
+          kind === "platform" ? [...research.platforms, id as never] : research.platforms,
+      },
+    },
+  };
+}
+
+/** Hire the talent your reputation attracts — if the office has a desk (§10). */
+export function hireStaff(state: LoopState, specialty: Specialty): LoopState {
+  expectPhase(state, "grow");
+  if (state.studio.staff.length >= maxStaff(state.studio.offices)) {
+    throw new Error(`The ${state.studio.offices} office is full — upgrade to grow the team`);
+  }
+  const candidate = makeCandidate(
+    specialty,
+    state.studio.reputation,
+    `hire-${state.projectCounter}-${state.studio.staff.length + 1}`,
+  );
+  const cost = PROGRESSION_TUNING.HIRE_COST_QUARTERS * quarterlySalary(candidate);
+  if (state.studio.cash < cost) throw new Error("Not enough cash for the signing package");
+  return {
+    ...state,
+    studio: {
+      ...state.studio,
+      cash: state.studio.cash - cost,
+      staff: [...state.studio.staff, candidate],
     },
   };
 }

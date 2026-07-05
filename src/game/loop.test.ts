@@ -8,19 +8,23 @@ import {
   enterShipDecision,
   finishReveal,
   greenlightConcept,
+  hireStaff,
   investInEngine,
   isRevealComplete,
   launch,
+  researchUnlock,
   resolveEvent,
   setAllocation,
   setCrunch,
   shipPolish,
   startNextProject,
   trainTeam,
+  upgradeOffice,
   type LoopState,
   type StudioState,
 } from "./loop";
 import { ECONOMY_TUNING } from "./economy";
+import { startingResearch } from "./progression";
 import type { LaunchPlan } from "./shipdecision";
 import { isProductionComplete } from "./milestones";
 import type { ConceptDraft } from "./conception";
@@ -65,6 +69,8 @@ function seedStudio(): StudioState {
       makeStaff("s5", "qa", 70),
     ],
     engines: [{ id: "engine-1", name: "HomeBrew 1.0", techLevel: 70 }],
+    offices: "studio", // §10: big enough that scope isn't what these tests probe
+    research: startingResearch(),
   };
 }
 
@@ -439,5 +445,93 @@ describe("the economy (§9)", () => {
     const broke = { ...grow, studio: { ...grow.studio, cash: 100 } };
     expect(() => investInEngine(broke)).toThrow(/Not enough cash/);
     expect(() => trainTeam(broke)).toThrow(/Not enough cash/);
+  });
+});
+
+describe("meta-progression (§10)", () => {
+  /** Drives one conceive-phase state through an identical project to grow. */
+  function driveProject(s: LoopState, title: string, genre?: "shooter"): LoopState {
+    s = greenlightConcept(s, { ...draft, title, genres: [genre ?? "rpg"] });
+    s = beginProduction(s, { engineId: "engine-1", riskTaking: 60 });
+    s = setAllocation(s, "content", 22);
+    s = setAllocation(s, "narrative", 20);
+    while (s.run && !isProductionComplete(s.run)) s = advanceProduction(s, quietRng);
+    s = enterShipDecision(s);
+    s = launch(
+      s,
+      { releaseWindow: { year: 1987, quarter: 2 }, marketingHype: 35, price: 50, platforms: ["pc"] },
+      () => 0.5,
+    );
+    while (s.reveal && !isRevealComplete(s.reveal)) s = advanceReveal(s);
+    return completePostMortem(finishReveal(s));
+  }
+
+  it("success raises the bar: the same launch is judged against higher expectations", () => {
+    const first = driveProject(createLoop(seedStudio()), "Dungeon of the Space Crown");
+    expect(first.studio.reputation).toBeGreaterThan(10); // the hit paid reputation
+
+    const second = driveProject(startNextProject(first), "Completely New Thing");
+    // Identical game, marketing, scope, new IP — only reputation changed.
+    expect(second.launch!.reception.expectedQuality).toBeGreaterThan(
+      first.launch!.reception.expectedQuality,
+    );
+    // …and the higher bar shaves the same game's landing (§7.11's treadmill).
+    expect(second.launch!.reception.gap).toBeLessThan(first.launch!.reception.gap);
+  });
+
+  it("locked content blocks greenlight until researched", () => {
+    const shooterDraft: ConceptDraft = { ...draft, title: "Gun Thing", genres: ["shooter"] };
+    expect(() => greenlightConcept(createLoop(seedStudio()), shooterDraft)).toThrow(
+      /shooter isn't researched/,
+    );
+
+    let grow = driveProject(createLoop(seedStudio()), "First");
+    grow = researchUnlock(grow, "genre", "shooter");
+    expect(grow.studio.research.genres).toContain("shooter");
+    const next = greenlightConcept(startNextProject(grow), shooterDraft);
+    expect(next.game!.genres).toEqual(["shooter"]);
+    expect(() => researchUnlock(grow, "genre", "rpg")).toThrow(/already researched/);
+    expect(() => researchUnlock(grow, "genre", "vaporwave")).toThrow(/Unknown genre/);
+  });
+
+  it("the office gates project scope, and upgrading it is gated in turn", () => {
+    const garage = createLoop({ ...seedStudio(), offices: "garage" });
+    expect(() =>
+      greenlightConcept(garage, { ...draft, scopeTier: "aaa" }),
+    ).toThrow(/garage office can't support/);
+
+    let grow = driveProject(createLoop({ ...seedStudio(), offices: "garage" }), "First");
+    const poor = { ...grow, studio: { ...grow.studio, reputation: 5 } };
+    expect(() => upgradeOffice(poor)).toThrow(/Reputation/);
+    const broke = { ...grow, studio: { ...grow.studio, cash: 1_000 } };
+    expect(() => upgradeOffice(broke)).toThrow(/Not enough cash/);
+    grow = upgradeOffice(grow); // the hit's reputation + revenue open the indie office
+    expect(grow.studio.offices).toBe("indie");
+  });
+
+  it("engine R&D is capped by the office's tech ceiling", () => {
+    let grow = driveProject(createLoop(seedStudio()), "First"); // studio office: ceiling 80
+    grow = investInEngine(grow); // 70 → 80, clamped at the ceiling
+    expect(grow.studio.engines[0]!.techLevel).toBe(80);
+    expect(() => investInEngine(grow)).toThrow(/tech ceiling/);
+  });
+
+  it("hiring: reputation attracts better people, and desks run out", () => {
+    const grow = driveProject(createLoop(seedStudio()), "First");
+    const hired = hireStaff(grow, "audio");
+    expect(hired.studio.staff).toHaveLength(6);
+    expect(hired.studio.cash).toBeLessThan(grow.studio.cash);
+    const hire = hired.studio.staff[5]!;
+    expect(hire.specialty).toBe("audio");
+    // A famous studio pulls a stronger candidate for the same seat.
+    const famous = hireStaff(
+      { ...grow, studio: { ...grow.studio, reputation: 80 } },
+      "audio",
+    );
+    expect(famous.studio.staff[5]!.skills.audio).toBeGreaterThan(hire.skills.audio);
+    // No desks left in a garage.
+    expect(() =>
+      hireStaff({ ...grow, studio: { ...grow.studio, offices: "garage" } }, "audio"),
+    ).toThrow(/office is full/);
   });
 });
