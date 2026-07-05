@@ -14,6 +14,7 @@ import {
   enterShipDecision,
   finishReveal,
   greenlightConcept,
+  investInEngine,
   launch,
   resolveEvent,
   setAllocation,
@@ -23,6 +24,7 @@ import {
   shipDelay,
   shipPolish,
   startNextProject,
+  trainTeam,
   type LoopState,
   type PreProductionChoices,
   type StudioState,
@@ -51,10 +53,11 @@ function founder(id: string, name: string, specialty: Specialty, skill: number) 
   };
 }
 
-/** 1985. A garage. Four believers and a homebrew engine (GDD §1). */
+/** 1985. A garage. Four believers, a homebrew engine, and the seed savings
+ * that have to last until the first game pays out (GDD §1, §9). */
 const INITIAL_STUDIO: StudioState = {
   name: "Garage Games",
-  cash: 20_000,
+  cash: 65_000,
   reputation: 0,
   year: 1985,
   ipCatalog: [],
@@ -84,7 +87,11 @@ interface LoopStore {
   advanceReveal: () => void;
   finishReveal: () => void;
   completePostMortem: () => void;
+  investInEngine: () => void;
+  trainTeam: () => void;
   startNextProject: () => void;
+  /** After bankruptcy: back to 1985, fresh garage. */
+  restart: () => void;
 }
 
 export const useLoopStore = create<LoopStore>()((set) => {
@@ -108,6 +115,9 @@ export const useLoopStore = create<LoopStore>()((set) => {
     advanceReveal: () => apply(advanceReveal),
     finishReveal: () => apply(finishReveal),
     completePostMortem: () => apply(completePostMortem),
+    investInEngine: () => apply(investInEngine),
+    trainTeam: () => apply(trainTeam),
     startNextProject: () => apply(startNextProject),
+    restart: () => set({ state: createLoop(INITIAL_STUDIO) }),
   };
 });

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { publisherOffer, ECONOMY_TUNING, type FundingKind } from "../game/economy";
 import { useLoopStore } from "../state/loopStore";
 
 export default function PreProductionScreen() {
@@ -7,8 +8,11 @@ export default function PreProductionScreen() {
   const beginProduction = useLoopStore((s) => s.beginProduction);
   const [engineId, setEngineId] = useState(studio.engines[0]?.id ?? "");
   const [riskTaking, setRiskTaking] = useState(50);
+  const [funding, setFunding] = useState<FundingKind>("self");
 
   if (!game) return null;
+
+  const offer = publisherOffer(studio.reputation, game.scopeTier);
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -68,6 +72,46 @@ export default function PreProductionScreen() {
       </section>
 
       <section className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400">Funding</h2>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setFunding("self")}
+            className={`rounded-md border px-3 py-2 text-left text-sm ${
+              funding === "self" ? "border-amber-400 bg-amber-400/10" : "border-zinc-700 hover:border-zinc-500"
+            }`}
+          >
+            <p className="font-medium">Self-fund</p>
+            <p className="text-xs text-zinc-500">Keep all upside, carry all risk</p>
+          </button>
+          {offer ? (
+            <button
+              type="button"
+              onClick={() => setFunding("publisher")}
+              className={`rounded-md border px-3 py-2 text-left text-sm ${
+                funding === "publisher" ? "border-amber-400 bg-amber-400/10" : "border-zinc-700 hover:border-zinc-500"
+              }`}
+            >
+              <p className="font-medium">Publisher deal</p>
+              <p className="text-xs text-zinc-500">
+                ${offer.advance.toLocaleString()} advance + marketing muscle ·{" "}
+                {Math.round(offer.revenueCut * 100)}% of revenue
+              </p>
+            </button>
+          ) : (
+            <div className="rounded-md border border-zinc-800 px-3 py-2 text-left text-sm opacity-50">
+              <p className="font-medium">Publisher deal</p>
+              <p className="text-xs text-zinc-500">
+                {studio.reputation < ECONOMY_TUNING.PUBLISHER_REPUTATION_GATE
+                  ? `Locked — reputation ${Math.round(studio.reputation)}/${ECONOMY_TUNING.PUBLISHER_REPUTATION_GATE}`
+                  : "Publishers won't fund a prototype"}
+              </p>
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400">The team</h2>
         <ul className="grid grid-cols-2 gap-1 text-sm">
           {studio.staff.map((member) => (
@@ -83,7 +127,7 @@ export default function PreProductionScreen() {
 
       <button
         type="button"
-        onClick={() => beginProduction({ engineId, riskTaking })}
+        onClick={() => beginProduction({ engineId, riskTaking, funding })}
         className="rounded-md bg-amber-400 px-5 py-2 font-semibold text-zinc-950 hover:bg-amber-300"
       >
         Begin production

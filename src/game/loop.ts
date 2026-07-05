@@ -49,6 +49,17 @@ import {
   type ShipDecisionState,
 } from "./shipdecision";
 import { computeSales, GROW_TUNING, reputationDelta, updateIpCatalog } from "./grow";
+import {
+  applyRevenueCut,
+  buildSalesTail,
+  ECONOMY_TUNING,
+  publisherOffer,
+  quarterlyBurn,
+  trainStaff,
+  trainingCost,
+  type FundingKind,
+  type PublisherOffer,
+} from "./economy";
 import { OUTLETS } from "./data/outlets";
 import type { Rng } from "./reviews";
 
@@ -63,7 +74,8 @@ export type LoopPhase =
   | "ship"
   | "reception"
   | "post-mortem"
-  | "grow";
+  | "grow"
+  | "bankrupt";
 
 /** Everything that persists across projects (§3 beat 8: the past compounds). */
 export interface StudioState {
@@ -86,7 +98,12 @@ export interface RevealState {
 
 export interface GrowthReport {
   units: number;
+  /** Total net revenue (after platform and publisher cuts). */
   revenue: number;
+  /** The launch-quarter chunk banked immediately; the rest tails out (§9). */
+  bankedNow: number;
+  /** Remaining quarterly payouts still to come. */
+  tail: number[];
   reputationDelta: number;
   ip: Ip | null;
   notes: string[];
@@ -107,6 +124,10 @@ export interface LoopState {
   launch: LaunchResult | null;
   reveal: RevealState | null;
   growth: GrowthReport | null;
+  /** The publisher deal funding the current project, if any (§9). */
+  deal: PublisherOffer | null;
+  /** Back-catalog revenue still tailing out, one entry per future quarter (§9). */
+  pendingRevenue: number[];
   /** Notices from the most recent production action, for the UI. */
   lastNotices: ProductionNotice[];
 }
@@ -124,32 +145,63 @@ export function createLoop(studio: StudioState, market: MarketSimState = createM
     launch: null,
     reveal: null,
     growth: null,
+    deal: null,
+    pendingRevenue: [],
     lastNotices: [],
+  };
+}
+
+/** The staff currently drawing salaries: whoever is actually on the project. */
+function activeStaff(state: LoopState): Staff[] {
+  return state.ship?.run.staff ?? state.run?.staff ?? state.studio.staff;
+}
+
+/** Out of cash: the §9 failure state. Terminal — only a restart leaves it. */
+function checkSolvency(state: LoopState): LoopState {
+  if (state.studio.cash >= 0) return state;
+  return {
+    ...state,
+    phase: "bankrupt",
+    lastNotices: [
+      ...state.lastNotices,
+      { kind: "market", text: `${state.studio.name} is out of cash. The doors close.` },
+    ],
   };
 }
 
 /**
  * One quarter of market time passes (production milestones and release
- * slips cost calendar time; crunch is how you dodge that). Market news
- * joins the notices; a rival raid is returned for the caller to stage.
+ * slips cost calendar time; crunch is how you dodge that). The quarter
+ * costs payroll and overhead, pays out any back-catalog tail, and can
+ * end the studio (§9). Market news joins the notices; a rival raid is
+ * returned for the caller to stage.
  */
 function tickMarket(
   state: LoopState,
   rng: Rng,
 ): { state: LoopState; poachRaidBy: string | null } {
   const tick = advanceMarketQuarter(state.market, rng);
-  return {
-    state: {
-      ...state,
-      market: tick.sim,
-      studio: { ...state.studio, year: tick.sim.year },
-      lastNotices: [
-        ...state.lastNotices,
-        ...tick.news.map((text) => ({ kind: "market" as const, text })),
-      ],
+  const burn = quarterlyBurn(activeStaff(state));
+  const payout = state.pendingRevenue[0] ?? 0;
+  const books =
+    `Quarterly books: -$${burn.toLocaleString()} payroll & overhead` +
+    (payout > 0 ? `, +$${payout.toLocaleString()} back-catalog revenue` : "");
+  const next: LoopState = {
+    ...state,
+    market: tick.sim,
+    studio: {
+      ...state.studio,
+      year: tick.sim.year,
+      cash: state.studio.cash - burn + payout,
     },
-    poachRaidBy: tick.poachRaidBy,
+    pendingRevenue: state.pendingRevenue.slice(1),
+    lastNotices: [
+      ...state.lastNotices,
+      ...tick.news.map((text) => ({ kind: "market" as const, text })),
+      { kind: "market" as const, text: books },
+    ],
   };
+  return { state: checkSolvency(next), poachRaidBy: tick.poachRaidBy };
 }
 
 function expectPhase(state: LoopState, phase: LoopPhase): void {
@@ -195,6 +247,8 @@ export interface PreProductionChoices {
   engineId: string;
   /** Deliberate creative risk, 0–100 — the Innovation feed (§7.2). */
   riskTaking: number;
+  /** Self-fund, or take the publisher's deal if one is on the table (§9). */
+  funding?: FundingKind;
 }
 
 export function beginProduction(state: LoopState, choices: PreProductionChoices): LoopState {
@@ -203,12 +257,25 @@ export function beginProduction(state: LoopState, choices: PreProductionChoices)
   if (!state.studio.engines.some((e) => e.id === choices.engineId)) {
     throw new Error(`Unknown engine "${choices.engineId}"`);
   }
+  let deal: PublisherOffer | null = null;
+  let cash = state.studio.cash;
+  if ((choices.funding ?? "self") === "publisher") {
+    deal = publisherOffer(state.studio.reputation, state.game.scopeTier);
+    if (!deal) {
+      throw new Error(
+        "No publisher deal on the table — reputation too low, or the scope is too small to fund",
+      );
+    }
+    cash += deal.advance;
+  }
   return {
     ...state,
     phase: "production",
     game: { ...state.game, engineId: choices.engineId },
     riskTaking: clamp(choices.riskTaking, 0, 100),
     run: createProductionRun(state.game.scopeTier, state.studio.staff),
+    deal,
+    studio: { ...state.studio, cash },
   };
 }
 
@@ -238,8 +305,14 @@ export function advanceProduction(state: LoopState, rng: Rng): LoopState {
   const ticked = tickMarket({ ...state, run, lastNotices: notices }, rng);
   let next = ticked.state;
   // A rival raid from the market becomes a §5 poaching event, if the
-  // milestone didn't already interrupt with something.
-  if (ticked.poachRaidBy && next.run && !next.run.pendingEvent && next.run.staff.length > 0) {
+  // milestone didn't already interrupt with something (and we're still alive).
+  if (
+    ticked.poachRaidBy &&
+    next.phase === "production" &&
+    next.run &&
+    !next.run.pendingEvent &&
+    next.run.staff.length > 0
+  ) {
     const event = makePoachingEvent(next.run.staff, ticked.poachRaidBy);
     next = {
       ...next,
@@ -313,7 +386,12 @@ export function launch(
   const sequelIp = state.game.isSequelOf
     ? state.studio.ipCatalog.find((ip) => ip.id === state.game!.ipId)
     : undefined;
-  const result = launchGame(state.ship, plan, {
+  // The publisher's marketing machine pushes hype for free (§9).
+  const effectivePlan: LaunchPlan = {
+    ...plan,
+    marketingHype: clamp(plan.marketingHype + (state.deal?.marketingBonus ?? 0), 0, 100),
+  };
+  const result = launchGame(state.ship, effectivePlan, {
     game: state.game,
     genreProfile: blendGenreProfiles(state.game.genres),
     market: marketOverride ?? toMarketView(state.market),
@@ -394,6 +472,12 @@ export function completePostMortem(state: LoopState): LoopState {
     platforms: result.game.platforms,
     installBases: installBases(state.market),
   });
+  // §9: the publisher takes their cut, then revenue tails out quarterly,
+  // front-loaded — extended by word of mouth when users love it.
+  const netRevenue = applyRevenueCut(sales.revenue, state.deal);
+  const tail = buildSalesTail(netRevenue, result.userScore);
+  const bankedNow = tail[0] ?? 0;
+
   const repDelta = reputationDelta(result.reception.metascore, result.userScore);
   const ipUpdate = updateIpCatalog(
     state.studio.ipCatalog,
@@ -404,6 +488,20 @@ export function completePostMortem(state: LoopState): LoopState {
 
   const notes: string[] = [];
   if (ipUpdate.note) notes.push(ipUpdate.note);
+  if (state.deal) {
+    notes.push(
+      `The publisher took ${Math.round(state.deal.revenueCut * 100)}% — $${(
+        sales.revenue - netRevenue
+      ).toLocaleString()}.`,
+    );
+  }
+  if (tail.length > 1) {
+    notes.push(
+      `$${bankedNow.toLocaleString()} banked at launch; the rest tails out over ${
+        tail.length - 1
+      } quarters.`,
+    );
+  }
   notes.push(
     repDelta >= 0
       ? "Reputation is climbing — and so is the bar you'll be held to."
@@ -417,23 +515,79 @@ export function completePostMortem(state: LoopState): LoopState {
     burnout: clamp(s.burnout - t.POST_PROJECT_BURNOUT_RECOVERY, 0, 100),
   }));
 
-  return {
+  // Launch debts come due here: if the banked launch quarter doesn't cover
+  // what production and marketing dug, the studio is done (§9).
+  return checkSolvency({
     ...state,
     phase: "grow",
     studio: {
       ...state.studio,
-      cash: state.studio.cash + sales.revenue,
+      cash: state.studio.cash + bankedNow,
       reputation: clamp(state.studio.reputation + repDelta, 0, 100),
       year: Math.max(state.studio.year, result.game.releaseWindow.year),
       ipCatalog: ipUpdate.catalog,
       staff,
     },
+    pendingRevenue: mergeTails(state.pendingRevenue, tail.slice(1)),
     growth: {
       units: sales.units,
-      revenue: sales.revenue,
+      revenue: netRevenue,
+      bankedNow,
+      tail: tail.slice(1),
       reputationDelta: repDelta,
       ip: ipUpdate.ip,
       notes,
+    },
+  });
+}
+
+/** Overlapping tails (this game's + the back catalog's) pay out together. */
+function mergeTails(a: number[], b: number[]): number[] {
+  const merged: number[] = [];
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    merged.push((a[i] ?? 0) + (b[i] ?? 0));
+  }
+  return merged;
+}
+
+// ---------------------------------------------------------------------------
+// Reinvestment (§3 beat 8, §9 costs)
+// ---------------------------------------------------------------------------
+
+/** Engine R&D: raises the tech ceiling for every future project (§10). */
+export function investInEngine(state: LoopState): LoopState {
+  expectPhase(state, "grow");
+  const engine = state.studio.engines[0];
+  if (!engine) throw new Error("The studio has no engine");
+  const cost = ECONOMY_TUNING.ENGINE_UPGRADE_COST;
+  if (state.studio.cash < cost) throw new Error("Not enough cash for engine R&D");
+  return {
+    ...state,
+    studio: {
+      ...state.studio,
+      cash: state.studio.cash - cost,
+      engines: [
+        {
+          ...engine,
+          techLevel: clamp(engine.techLevel + ECONOMY_TUNING.ENGINE_UPGRADE_TECH_GAIN, 0, 100),
+        },
+        ...state.studio.engines.slice(1),
+      ],
+    },
+  };
+}
+
+/** A training program: every specialist sharpens their craft (§5, §9). */
+export function trainTeam(state: LoopState): LoopState {
+  expectPhase(state, "grow");
+  const cost = trainingCost(state.studio.staff.length);
+  if (state.studio.cash < cost) throw new Error("Not enough cash for training");
+  return {
+    ...state,
+    studio: {
+      ...state.studio,
+      cash: state.studio.cash - cost,
+      staff: trainStaff(state.studio.staff),
     },
   };
 }
@@ -451,6 +605,7 @@ export function startNextProject(state: LoopState): LoopState {
     launch: null,
     reveal: null,
     growth: null,
+    deal: null,
     lastNotices: [],
   };
 }

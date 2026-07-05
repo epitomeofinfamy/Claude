@@ -8,6 +8,7 @@ import {
   enterShipDecision,
   finishReveal,
   greenlightConcept,
+  investInEngine,
   isRevealComplete,
   launch,
   resolveEvent,
@@ -15,9 +16,12 @@ import {
   setCrunch,
   shipPolish,
   startNextProject,
+  trainTeam,
   type LoopState,
   type StudioState,
 } from "./loop";
+import { ECONOMY_TUNING } from "./economy";
+import type { LaunchPlan } from "./shipdecision";
 import { isProductionComplete } from "./milestones";
 import type { ConceptDraft } from "./conception";
 import type { Specialty, Staff } from "./types";
@@ -49,7 +53,7 @@ function makeStaff(id: string, specialty: Specialty, skill: number): Staff {
 function seedStudio(): StudioState {
   return {
     name: "Garage Games",
-    cash: 50_000,
+    cash: 150_000,
     reputation: 10,
     year: 1985,
     ipCatalog: [],
@@ -262,5 +266,178 @@ describe("mid-loop bookkeeping", () => {
       () => 0.5,
     );
     expect(launched.studio.cash).toBe(preLaunchCash - 50 * 200);
+  });
+});
+
+describe("the economy (§9)", () => {
+  /** A struggling studio: weak team, weak engine, thin runway. */
+  function shakyStudio(cash: number): StudioState {
+    return {
+      ...seedStudio(),
+      cash,
+      reputation: 0,
+      staff: [
+        makeStaff("w1", "designer", 30),
+        makeStaff("w2", "programmer", 30),
+        makeStaff("w3", "artist", 30),
+        makeStaff("w4", "writer", 30),
+      ],
+      engines: [{ id: "engine-1", name: "HomeBrew 0.1", techLevel: 5 }],
+    };
+  }
+
+  function runProduction(s: LoopState): LoopState {
+    while (s.phase === "production" && s.run && !isProductionComplete(s.run)) {
+      s = advanceProduction(s, quietRng);
+    }
+    return s;
+  }
+
+  function throughReveal(s: LoopState): LoopState {
+    while (s.reveal && !isRevealComplete(s.reveal)) s = advanceReveal(s);
+    return finishReveal(s);
+  }
+
+  it("every production quarter costs payroll and overhead", () => {
+    let s = greenlightConcept(createLoop(seedStudio()), draft);
+    s = beginProduction(s, { engineId: "engine-1", riskTaking: 50 });
+    const before = s.studio.cash;
+    s = advanceProduction(s, quietRng);
+    expect(s.studio.cash).toBeLessThan(before);
+    expect(s.lastNotices.some((n) => n.text.includes("payroll & overhead"))).toBe(true);
+  });
+
+  it("a hit pays out over a front-loaded tail; the whole tail is the revenue", () => {
+    const { states } = playOneProject();
+    const growth = states.grow!.growth!;
+    expect(growth.bankedNow).toBeGreaterThan(0);
+    expect(growth.tail.length).toBeGreaterThanOrEqual(4);
+    expect(growth.bankedNow).toBeGreaterThan(growth.tail[growth.tail.length - 1]!);
+    expect(growth.bankedNow + growth.tail.reduce((a, b) => a + b, 0)).toBe(growth.revenue);
+    // The tail keeps paying: the next project's first quarter banks a payout.
+    let s = startNextProject(states.grow!);
+    expect(s.pendingRevenue.length).toBeGreaterThan(0);
+    const payout = s.pendingRevenue[0]!;
+    s = greenlightConcept(s, { ...draft, title: "Next One" });
+    s = beginProduction(s, { engineId: "engine-1", riskTaking: 50 });
+    const before = s.studio.cash;
+    s = advanceProduction(s, quietRng);
+    expect(s.studio.cash).toBeCloseTo(
+      before - 10_690 + payout, // burn for this 5-person roster is fixed
+      0,
+    );
+  });
+
+  it("hit path: the studio ends the project richer than it started", () => {
+    const { states } = playOneProject();
+    const grow = states.grow!;
+    const totalIn = grow.growth!.revenue;
+    const start = 150_000;
+    // All future tail quarters included, the project made money.
+    expect(grow.studio.cash + grow.pendingRevenue.reduce((a, b) => a + b, 0)).toBeGreaterThan(
+      start,
+    );
+    expect(totalIn).toBeGreaterThan(0);
+  });
+
+  it("flop path: a weak game with a marketing debt ends in bankruptcy", () => {
+    let s = greenlightConcept(createLoop(shakyStudio(40_000)), draft);
+    s = beginProduction(s, { engineId: "engine-1", riskTaking: 5 });
+    // Misallocate: everything into audio, starving what an RPG needs.
+    for (const ws of ["gameplay", "content", "tech", "art", "narrative", "polish"] as const) {
+      s = setAllocation(s, ws, 2);
+    }
+    s = setAllocation(s, "audio", 40);
+    s = runProduction(s);
+    expect(s.phase).toBe("production"); // survived production, barely
+    s = enterShipDecision(s);
+    const plan: LaunchPlan = {
+      releaseWindow: { year: 1987, quarter: 1 },
+      marketingHype: 100, // an over-marketed flop — the §9 death spiral
+      price: 90,
+      platforms: ["pc"],
+    };
+    s = launch(s, plan, () => 0.5);
+    expect(s.studio.cash).toBeLessThan(0); // launch debt
+    s = throughReveal(s);
+    expect(s.launch!.reception.metascore).toBeLessThan(55);
+    s = completePostMortem(s);
+    expect(s.phase).toBe("bankrupt");
+    expect(s.studio.cash).toBeLessThan(0);
+  });
+
+  it("bloated payroll on an over-scoped bet dies mid-production", () => {
+    let s = greenlightConcept(createLoop(shakyStudio(25_000)), {
+      ...draft,
+      scopeTier: "aaa",
+    });
+    s = beginProduction(s, { engineId: "engine-1", riskTaking: 50 });
+    let guard = 0;
+    while (s.phase === "production" && guard++ < 15) {
+      s = advanceProduction(s, quietRng);
+    }
+    expect(s.phase).toBe("bankrupt");
+    expect(s.run!.milestoneIndex).toBeLessThan(s.run!.totalMilestones);
+    expect(() => advanceProduction(s, quietRng)).toThrow(/phase/);
+  });
+
+  it("publisher deal: advance up front, marketing muscle, a cut of the take", () => {
+    const funded = { ...seedStudio(), reputation: 40 };
+    const drive = (funding: "self" | "publisher") => {
+      let s = greenlightConcept(createLoop(funded), draft);
+      const cashAtPrePro = s.studio.cash;
+      s = beginProduction(s, { engineId: "engine-1", riskTaking: 60, funding });
+      const advance = s.studio.cash - cashAtPrePro;
+      s = setAllocation(s, "content", 22);
+      s = setAllocation(s, "narrative", 20);
+      s = runProduction(s);
+      s = enterShipDecision(s);
+      s = launch(
+        s,
+        { releaseWindow: { year: 1987, quarter: 2 }, marketingHype: 35, price: 50, platforms: ["pc"] },
+        () => 0.5,
+      );
+      s = throughReveal(s);
+      s = completePostMortem(s);
+      return { state: s, advance };
+    };
+    const self = drive("self");
+    const pub = drive("publisher");
+
+    expect(self.advance).toBe(0);
+    expect(pub.advance).toBe(ECONOMY_TUNING.PUBLISHER_ADVANCE_BY_TIER.indie);
+    // The publisher's marketing machine raises the expectation baseline…
+    expect(pub.state.launch!.reception.expectedQuality).toBeGreaterThan(
+      self.state.launch!.reception.expectedQuality,
+    );
+    // …its muscle sells more units — and its cut still leaves you with less.
+    expect(pub.state.growth!.units).toBeGreaterThan(self.state.growth!.units);
+    expect(pub.state.growth!.revenue).toBeLessThan(self.state.growth!.revenue);
+  });
+
+  it("publisher deals are gated: low reputation gets no meeting", () => {
+    let s = greenlightConcept(createLoop(seedStudio()), draft); // reputation 10
+    expect(() =>
+      beginProduction(s, { engineId: "engine-1", riskTaking: 50, funding: "publisher" }),
+    ).toThrow(/No publisher deal/);
+  });
+
+  it("grow-phase reinvestment: engine R&D and training cost cash and pay off", () => {
+    const grow = playOneProject().states.grow!;
+    const upgraded = investInEngine(grow);
+    expect(upgraded.studio.engines[0]!.techLevel).toBe(
+      grow.studio.engines[0]!.techLevel + ECONOMY_TUNING.ENGINE_UPGRADE_TECH_GAIN,
+    );
+    expect(upgraded.studio.cash).toBe(grow.studio.cash - ECONOMY_TUNING.ENGINE_UPGRADE_COST);
+
+    const trained = trainTeam(grow);
+    expect(trained.studio.staff[0]!.skills[trained.studio.staff[0]!.specialty]).toBe(
+      grow.studio.staff[0]!.skills[grow.studio.staff[0]!.specialty] +
+        ECONOMY_TUNING.TRAINING_SKILL_GAIN,
+    );
+
+    const broke = { ...grow, studio: { ...grow.studio, cash: 100 } };
+    expect(() => investInEngine(broke)).toThrow(/Not enough cash/);
+    expect(() => trainTeam(broke)).toThrow(/Not enough cash/);
   });
 });

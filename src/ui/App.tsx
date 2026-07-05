@@ -6,6 +6,7 @@ import ShipDecisionScreen from "./ShipDecisionScreen";
 import ReceptionScreen from "./ReceptionScreen";
 import PostMortemScreen from "./PostMortemScreen";
 import GrowScreen from "./GrowScreen";
+import BankruptScreen from "./BankruptScreen";
 import type { LoopPhase } from "../game/loop";
 import type { JSX } from "react";
 
@@ -17,6 +18,7 @@ const SCREENS: Record<LoopPhase, () => JSX.Element | null> = {
   reception: ReceptionScreen,
   "post-mortem": PostMortemScreen,
   grow: GrowScreen,
+  bankrupt: BankruptScreen,
 };
 
 export default function App() {

@@ -1,3 +1,4 @@
+import { ECONOMY_TUNING, trainingCost } from "../game/economy";
 import { useLoopStore } from "../state/loopStore";
 
 export default function GrowScreen() {
@@ -6,6 +7,9 @@ export default function GrowScreen() {
   const { game, growth, studio } = state;
 
   if (!game || !growth) return null;
+
+  const engineCost = ECONOMY_TUNING.ENGINE_UPGRADE_COST;
+  const trainCost = trainingCost(studio.staff.length);
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -23,6 +27,10 @@ export default function GrowScreen() {
           <p className="text-xs uppercase tracking-wider text-zinc-500">Net revenue</p>
           <p className="text-3xl font-black text-emerald-300">
             ${growth.revenue.toLocaleString()}
+          </p>
+          <p className="text-xs text-zinc-500">
+            ${growth.bankedNow.toLocaleString()} now
+            {growth.tail.length > 0 && ` · rest over ${growth.tail.length}q`}
           </p>
         </div>
         <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-center">
@@ -54,6 +62,38 @@ export default function GrowScreen() {
         <p className="text-sm text-zinc-500">
           The team took some downtime. Bank: ${studio.cash.toLocaleString()}.
         </p>
+      </section>
+
+      <section className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400">
+          Reinvest (§3: Grow)
+        </h2>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={studio.cash < engineCost}
+            onClick={store.investInEngine}
+            className="rounded-md border border-zinc-700 px-3 py-2 text-left text-sm hover:border-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <p className="font-medium">Engine R&D — ${engineCost.toLocaleString()}</p>
+            <p className="text-xs text-zinc-500">
+              {studio.engines[0]?.name}: tech {studio.engines[0]?.techLevel} → +
+              {ECONOMY_TUNING.ENGINE_UPGRADE_TECH_GAIN} (raises Presentation/Polish ceilings)
+            </p>
+          </button>
+          <button
+            type="button"
+            disabled={studio.cash < trainCost}
+            onClick={store.trainTeam}
+            className="rounded-md border border-zinc-700 px-3 py-2 text-left text-sm hover:border-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <p className="font-medium">Training program — ${trainCost.toLocaleString()}</p>
+            <p className="text-xs text-zinc-500">
+              Every specialist +{ECONOMY_TUNING.TRAINING_SKILL_GAIN} to their craft (salaries rise
+              with skill)
+            </p>
+          </button>
+        </div>
       </section>
 
       <button

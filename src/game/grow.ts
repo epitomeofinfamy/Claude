@@ -18,7 +18,7 @@ import { PLATFORM_CATALOG } from "./data/platforms";
 export const GROW_TUNING = {
   // --- Sales (§9 sketch) ---
   /** Install-base share a Metascore-at-pivot game reaches before modifiers. */
-  BASE_ATTACH_RATE: 0.004,
+  BASE_ATTACH_RATE: 0.0008,
   /** Metascore at which the sales multiplier is 1; quadratic around it (§7.7). */
   META_SALES_PIVOT: 70,
   PRICE_FLOOR_DOLLARS: 10,
