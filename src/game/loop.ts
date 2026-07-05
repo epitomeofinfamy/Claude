@@ -40,12 +40,17 @@ import {
 } from "./milestones";
 import {
   advanceMarketQuarter,
+  bumpGenreHype,
   createMarketSim,
   installBases,
   recordRelease,
   toMarketView,
   type MarketSimState,
 } from "./market";
+import {
+  rollStudioEvent,
+  type StudioEventInstance,
+} from "./studioEvents";
 import {
   applyCrunchRound,
   applyCutScope,
@@ -150,6 +155,8 @@ export interface LoopState {
   launch: LaunchResult | null;
   reveal: RevealState | null;
   growth: GrowthReport | null;
+  /** A §11 studio-level story beat awaiting the player's response. */
+  studioEvent: StudioEventInstance | null;
   /** The publisher deal funding the current project, if any (§9). */
   deal: PublisherOffer | null;
   /** Back-catalog revenue still tailing out, one entry per future quarter (§9). */
@@ -171,6 +178,7 @@ export function createLoop(studio: StudioState, market: MarketSimState = createM
     launch: null,
     reveal: null,
     growth: null,
+    studioEvent: null,
     deal: null,
     pendingRevenue: [],
     lastNotices: [],
@@ -487,7 +495,7 @@ export function finishReveal(state: LoopState): LoopState {
 // Beat 7 → 8: Grow — the outcome compounds
 // ---------------------------------------------------------------------------
 
-export function completePostMortem(state: LoopState): LoopState {
+export function completePostMortem(state: LoopState, rng: Rng = () => 0.99): LoopState {
   expectPhase(state, "post-mortem");
   const result = state.launch;
   if (!result || !state.game || !state.ship) throw new Error("No launch to grow from");
@@ -544,19 +552,42 @@ export function completePostMortem(state: LoopState): LoopState {
     burnout: clamp(s.burnout - t.POST_PROJECT_BURNOUT_RECOVERY, 0, 100),
   }));
 
+  const studio = {
+    ...state.studio,
+    cash: state.studio.cash + bankedNow,
+    reputation: clamp(state.studio.reputation + repDelta, 0, 100),
+    year: Math.max(state.studio.year, result.game.releaseWindow.year),
+    ipCatalog: ipUpdate.catalog,
+    staff,
+  };
+
+  // A §11 story beat may punctuate the cycle, weighted by how it went.
+  const studioEvent = rollStudioEvent(
+    {
+      studio,
+      launch: {
+        metascore: result.reception.metascore,
+        userScore: result.userScore,
+        gap: result.reception.gap,
+        genres: result.game.genres,
+        crunchShare:
+          state.ship.run.totalMilestones > 0
+            ? state.ship.run.crunchedMilestones / state.ship.run.totalMilestones
+            : 0,
+        departures: state.ship.run.departedStaff.length,
+      },
+      campaignYears: studio.year - 1985,
+    },
+    rng,
+  );
+
   // Launch debts come due here: if the banked launch quarter doesn't cover
   // what production and marketing dug, the studio is done (§9).
   return checkSolvency({
     ...state,
     phase: "grow",
-    studio: {
-      ...state.studio,
-      cash: state.studio.cash + bankedNow,
-      reputation: clamp(state.studio.reputation + repDelta, 0, 100),
-      year: Math.max(state.studio.year, result.game.releaseWindow.year),
-      ipCatalog: ipUpdate.catalog,
-      staff,
-    },
+    studio,
+    studioEvent,
     pendingRevenue: mergeTails(state.pendingRevenue, tail.slice(1)),
     growth: {
       units: sales.units,
@@ -566,6 +597,44 @@ export function completePostMortem(state: LoopState): LoopState {
       reputationDelta: repDelta,
       ip: ipUpdate.ip,
       notes,
+    },
+  });
+}
+
+/** Answer a §11 studio event: applies its declarative effects and clears it. */
+export function resolveStudioEvent(state: LoopState, optionId: string): LoopState {
+  expectPhase(state, "grow");
+  const event = state.studioEvent;
+  if (!event) throw new Error("No studio event to resolve");
+  const option = event.options.find((o) => o.id === optionId);
+  if (!option) throw new Error(`Unknown option "${optionId}" for event "${event.id}"`);
+  const fx = option.effects;
+
+  let staff = state.studio.staff;
+  if (fx.staffLeaves) staff = staff.filter((s) => s.id !== fx.staffLeaves);
+  if (fx.skillBump) {
+    const { specialty, amount } = fx.skillBump;
+    staff = staff.map((s) =>
+      s.specialty === specialty
+        ? { ...s, skills: { ...s.skills, [specialty]: clamp(s.skills[specialty] + amount, 0, 100) } }
+        : s,
+    );
+  }
+  if (fx.moraleAll !== undefined) {
+    staff = staff.map((s) => ({ ...s, morale: clamp(s.morale + fx.moraleAll!, 0, 100) }));
+  }
+
+  return checkSolvency({
+    ...state,
+    studioEvent: null,
+    market: fx.genreHype
+      ? bumpGenreHype(state.market, fx.genreHype.genre, fx.genreHype.momentum)
+      : state.market,
+    studio: {
+      ...state.studio,
+      staff,
+      cash: state.studio.cash + (fx.cash ?? 0),
+      reputation: clamp(state.studio.reputation + (fx.reputation ?? 0), 0, 100),
     },
   });
 }
@@ -712,6 +781,9 @@ export function trainTeam(state: LoopState): LoopState {
 /** Back to Conceive, at whatever scale the studio has grown to (§3). */
 export function startNextProject(state: LoopState): LoopState {
   expectPhase(state, "grow");
+  if (state.studioEvent) {
+    throw new Error("Answer the studio event before moving on — the industry is waiting");
+  }
   return {
     ...state,
     phase: "conceive",

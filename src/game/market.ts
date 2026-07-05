@@ -244,6 +244,29 @@ export function upcomingWindows(sim: MarketSimState, count: number): ReleaseWind
 // Mutation: releases and the quarterly tick
 // ---------------------------------------------------------------------------
 
+/** An outside shove to a genre's hype momentum (viral moments, §11). */
+export function bumpGenreHype(
+  sim: MarketSimState,
+  genre: Genre,
+  momentum: number,
+): MarketSimState {
+  const curve = sim.genreHype[genre];
+  return {
+    ...sim,
+    genreHype: {
+      ...sim.genreHype,
+      [genre]: {
+        ...curve,
+        momentum: clamp(
+          curve.momentum + momentum,
+          -MARKET_TUNING.MOMENTUM_CAP,
+          MARKET_TUNING.MOMENTUM_CAP,
+        ),
+      },
+    },
+  };
+}
+
 /** A game shipped into these genres: the trend absorbs it (§8 saturation). */
 export function recordRelease(sim: MarketSimState, genres: Genre[]): MarketSimState {
   const saturation = { ...sim.saturation };

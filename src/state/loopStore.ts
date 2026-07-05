@@ -19,6 +19,7 @@ import {
   launch,
   researchUnlock,
   resolveEvent,
+  resolveStudioEvent,
   setAllocation,
   setCrunch,
   shipCrunch,
@@ -93,6 +94,7 @@ interface LoopStore {
   advanceReveal: () => void;
   finishReveal: () => void;
   completePostMortem: () => void;
+  resolveStudioEvent: (optionId: string) => void;
   investInEngine: () => void;
   trainTeam: () => void;
   upgradeOffice: () => void;
@@ -123,7 +125,8 @@ export const useLoopStore = create<LoopStore>()((set) => {
     launch: (plan) => apply((s) => launch(s, plan, Math.random)),
     advanceReveal: () => apply(advanceReveal),
     finishReveal: () => apply(finishReveal),
-    completePostMortem: () => apply(completePostMortem),
+    completePostMortem: () => apply((s) => completePostMortem(s, Math.random)),
+    resolveStudioEvent: (optionId) => apply((s) => resolveStudioEvent(s, optionId)),
     investInEngine: () => apply(investInEngine),
     trainTeam: () => apply(trainTeam),
     upgradeOffice: () => apply(upgradeOffice),

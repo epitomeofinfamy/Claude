@@ -14,6 +14,7 @@ import {
   launch,
   researchUnlock,
   resolveEvent,
+  resolveStudioEvent,
   setAllocation,
   setCrunch,
   shipPolish,
@@ -25,6 +26,7 @@ import {
 } from "./loop";
 import { ECONOMY_TUNING } from "./economy";
 import { startingResearch } from "./progression";
+import { STUDIO_EVENT_TUNING } from "./studioEvents";
 import type { LaunchPlan } from "./shipdecision";
 import { isProductionComplete } from "./milestones";
 import type { ConceptDraft } from "./conception";
@@ -533,5 +535,73 @@ describe("meta-progression (§10)", () => {
     expect(() =>
       hireStaff({ ...grow, studio: { ...grow.studio, offices: "garage" } }, "audio"),
     ).toThrow(/office is full/);
+  });
+});
+
+describe("studio events (§11)", () => {
+  /** The hit playthrough, but with the Metascore doctored into award range. */
+  function awardWorthyPostMortem(): LoopState {
+    const s = playOneProject().states.postMortem!;
+    return {
+      ...s,
+      launch: {
+        ...s.launch!,
+        reception: { ...s.launch!.reception, metascore: 88 },
+      },
+    };
+  }
+
+  it("a story beat can punctuate the grow phase, and blocks the next project", () => {
+    const grow = completePostMortem(awardWorthyPostMortem(), () => 0);
+    expect(grow.studioEvent).not.toBeNull();
+    expect(grow.studioEvent!.id).toBe("award-show");
+    expect(() => startNextProject(grow)).toThrow(/studio event/);
+  });
+
+  it("resolving applies the declared effects: the award pays reputation and morale", () => {
+    const grow = completePostMortem(awardWorthyPostMortem(), () => 0);
+    const before = grow.studio;
+    const after = resolveStudioEvent(grow, "take-the-stage");
+    expect(after.studioEvent).toBeNull();
+    expect(after.studio.reputation).toBeCloseTo(
+      before.reputation + STUDIO_EVENT_TUNING.AWARD_REPUTATION,
+    );
+    expect(after.studio.staff[0]!.morale).toBe(
+      Math.min(100, before.staff[0]!.morale + STUDIO_EVENT_TUNING.AWARD_MORALE),
+    );
+    expect(startNextProject(after).phase).toBe("conceive");
+  });
+
+  it("a viral moment shoves the genre's hype curve — an §8 market condition", () => {
+    const doctored = (() => {
+      const s = playOneProject().states.postMortem!;
+      return {
+        ...s,
+        launch: {
+          ...s.launch!,
+          userScore: 90, // beloved by players…
+          reception: { ...s.launch!.reception, metascore: 72 }, // …snubbed by juries
+        },
+      };
+    })();
+    const grow = completePostMortem(doctored, () => 0);
+    expect(grow.studioEvent!.id).toBe("viral-moment");
+    const momentumBefore = grow.market.genreHype.rpg.momentum;
+    const after = resolveStudioEvent(grow, "ride-wave");
+    expect(after.market.genreHype.rpg.momentum).toBeGreaterThanOrEqual(momentumBefore);
+    expect(after.market.genreHype.rpg.momentum).toBeLessThanOrEqual(8); // capped
+  });
+
+  it("a quiet outcome with a quiet roll tells no story", () => {
+    const grow = completePostMortem(playOneProject().states.postMortem!, () => 0.999);
+    expect(grow.studioEvent).toBeNull();
+    expect(startNextProject(grow).phase).toBe("conceive");
+  });
+
+  it("rejects unknown options and double-resolution", () => {
+    const grow = completePostMortem(awardWorthyPostMortem(), () => 0);
+    expect(() => resolveStudioEvent(grow, "moonwalk")).toThrow(/Unknown option/);
+    const resolved = resolveStudioEvent(grow, "take-the-stage");
+    expect(() => resolveStudioEvent(resolved, "take-the-stage")).toThrow(/No studio event/);
   });
 });

@@ -26,12 +26,37 @@ export default function GrowScreen() {
   const candidate = makeCandidate("designer", studio.reputation, "preview");
   const hireCost = PROGRESSION_TUNING.HIRE_COST_QUARTERS * quarterlySalary(candidate);
 
+  const event = state.studioEvent;
+
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <header>
         <p className="text-sm font-medium uppercase tracking-[0.3em] text-amber-400">Grow</p>
         <h1 className="text-3xl font-bold">{game.title} — the ledger</h1>
       </header>
+
+      {/* §11: a studio-level story beat demands an answer first */}
+      {event && (
+        <section className="animate-reveal space-y-3 rounded-xl border border-amber-400/60 bg-amber-400/5 p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-400">
+            Industry news
+          </p>
+          <p className="text-lg font-bold text-amber-100">{event.headline}</p>
+          <p className="text-sm text-zinc-300">{event.body}</p>
+          <div className="flex flex-wrap gap-2">
+            {event.options.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => store.resolveStudioEvent(option.id)}
+                className="rounded-md border border-amber-400/60 px-3 py-1.5 text-sm text-amber-200 hover:bg-amber-400/10"
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="grid gap-4 sm:grid-cols-3">
         <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-center">
@@ -203,8 +228,10 @@ export default function GrowScreen() {
 
       <button
         type="button"
+        disabled={event !== null}
         onClick={store.startNextProject}
-        className="rounded-md bg-amber-400 px-5 py-2 font-semibold text-zinc-950 hover:bg-amber-300"
+        className="rounded-md bg-amber-400 px-5 py-2 font-semibold text-zinc-950 hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-30"
+        title={event ? "Answer the industry first" : undefined}
       >
         Start the next project
       </button>
