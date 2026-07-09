@@ -4,7 +4,11 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
 
+// Deploy path prefix: "/" locally; e.g. GG_BASE=/Claude/ for GitHub Pages.
+const base = process.env.GG_BASE ?? "/";
+
 export default defineConfig({
+  base,
   plugins: [
     react(),
     tailwindcss(),
@@ -26,8 +30,8 @@ export default defineConfig({
         description:
           "A game-dev-studio management sim: start in a 1985 garage, ship era-defining games — or chase trends into bankruptcy.",
         display: "standalone",
-        start_url: "/",
-        scope: "/",
+        start_url: base,
+        scope: base,
         orientation: "portrait",
         background_color: "#09090b",
         theme_color: "#09090b",
